@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OID4VC Interop Report</title>
+<style>
+:root {
+  --bg: #f7f7f5; --surface: #ffffff; --surface-2: #f0f0ed; --border: #e2e2dc;
+  --text: #1c1c1a; --muted: #6b6b64; --link: #2457c5;
+  --regression: #c62828; --regression-bg: #fdecea;
+  --fixed: #6a3fc1; --fixed-bg: #f1ebfc;
+  --known: #a15c00; --known-bg: #fff3e0;
+  --pass: #2e7d32; --pass-bg: #e8f5e9;
+  --skipped: #6b6b64; --skipped-bg: #efefec;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141413; --surface: #1d1d1b; --surface-2: #262624; --border: #34342f;
+    --text: #ecece8; --muted: #9c9c94; --link: #7aa2f7;
+    --regression: #ff6b6b; --regression-bg: #3a1c1c;
+    --fixed: #b39dff; --fixed-bg: #2a2140;
+    --known: #ffb74d; --known-bg: #3a2c14;
+    --pass: #6fcf75; --pass-bg: #1b3220;
+    --skipped: #9c9c94; --skipped-bg: #2a2a27;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141413; --surface: #1d1d1b; --surface-2: #262624; --border: #34342f;
+  --text: #ecece8; --muted: #9c9c94; --link: #7aa2f7;
+  --regression: #ff6b6b; --regression-bg: #3a1c1c;
+  --fixed: #b39dff; --fixed-bg: #2a2140;
+  --known: #ffb74d; --known-bg: #3a2c14;
+  --pass: #6fcf75; --pass-bg: #1b3220;
+  --skipped: #9c9c94; --skipped-bg: #2a2a27;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); }
+a { color: var(--link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, .mono { font-family: var(--mono); font-size: 12.5px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+header.top { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+h2 { font-size: 17px; margin: 0; }
+.sub { color: var(--muted); font-size: 13px; }
+.verdict { padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.verdict.bad { background: var(--regression-bg); color: var(--regression); }
+.verdict.good { background: var(--pass-bg); color: var(--pass); }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+.meta div { min-width: 0; }
+.meta dt { color: var(--muted); font-size: 12px; }
+.meta dd { margin: 0; overflow-wrap: anywhere; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; }
+.tile:hover { border-color: var(--muted); }
+.tile .name { font-weight: 600; }
+.tile .plan { color: var(--muted); font-size: 12px; font-family: var(--mono); overflow-wrap: anywhere; }
+.bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); margin: 10px 0 8px; }
+.bar span { display: block; height: 100%; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.counts b { color: var(--text); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+.o-regression { --c: var(--regression); --cb: var(--regression-bg); }
+.o-fixed { --c: var(--fixed); --cb: var(--fixed-bg); }
+.o-known-failure { --c: var(--known); --cb: var(--known-bg); }
+.o-pass { --c: var(--pass); --cb: var(--pass-bg); }
+.o-skipped { --c: var(--skipped); --cb: var(--skipped-bg); }
+.dot.o-regression, .dot.o-fixed, .dot.o-known-failure, .dot.o-pass, .dot.o-skipped, .bar span { background: var(--c); }
+.badge { justify-self: start; display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--cb); color: var(--c); white-space: nowrap; }
+.toolbar { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--bg); padding: 10px 0; margin-bottom: 8px; border-bottom: 1px solid var(--border); }
+.chip { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.toolbar input, .toolbar select { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; }
+.toolbar input { flex: 1 1 180px; min-width: 0; }
+.spacer { flex: 1; }
+section.profile { margin-top: 28px; }
+.profile-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 8px; }
+.profile-err { background: var(--regression-bg); color: var(--regression); border-radius: 8px; padding: 10px 12px; margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cases { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+details.case { border-top: 1px solid var(--border); }
+details.case:first-child { border-top: 0; }
+details.case > summary { list-style: none; display: grid; grid-template-columns: 118px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 14px; cursor: pointer; }
+details.case > summary::-webkit-details-marker { display: none; }
+details.case > summary:hover { background: var(--surface-2); }
+.case-id { font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.case-note { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.case-right { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.body { padding: 4px 14px 14px 144px; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; font-size: 13px; margin-bottom: 10px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.findings { margin: 0; padding: 0; list-style: none; }
+.findings li { border-left: 3px solid var(--border); padding: 4px 10px; margin: 6px 0; }
+.findings li.r-FAILURE { border-color: var(--regression); }
+.findings li.r-WARNING { border-color: var(--known); }
+.findings li.r-REVIEW { border-color: var(--fixed); }
+.findings .cond { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.reqs { font-size: 11.5px; color: var(--muted); }
+.step { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+.step-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.http { margin: 6px 0 0; font-family: var(--mono); font-size: 12px; }
+.http summary { cursor: pointer; overflow-wrap: anywhere; }
+pre { background: var(--surface-2); border-radius: 6px; padding: 8px 10px; overflow: auto; max-height: 320px; margin: 6px 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.shots { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.shots img { max-width: 260px; width: 100%; border: 1px solid var(--border); border-radius: 6px; cursor: zoom-in; }
+.empty { color: var(--muted); padding: 14px; }
+footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+.theme { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 12.5px; }
+#lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+#lightbox img { max-width: 100%; max-height: 100%; }
+@media (max-width: 640px) {
+  details.case > summary { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .body { padding: 4px 14px 14px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>OpenID4VC interop report</h1>
+      <div class="sub">Run <span class="mono">{{ run.run_id }}</span> · {{ run.started_at }}{% if run.finished_at %} → {{ run.finished_at }}{% endif %}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      {% if totals.regression %}
+      <span class="verdict bad">{{ totals.regression }} regression{{ "s" if totals.regression != 1 }}</span>
+      {% elif profile_errors %}
+      <span class="verdict bad">{{ profile_errors }} profile error{{ "s" if profile_errors != 1 }}</span>
+      {% else %}
+      <span class="verdict good">No regressions</span>
+      {% endif %}
+      <button class="theme" id="theme" type="button" aria-label="Toggle colour theme">Theme</button>
+    </div>
+  </header>
+
+  <dl class="meta">
+    <div><dt>Target</dt><dd>{{ run.target.name or "–" }}</dd></div>
+    {% if run.target.issuer %}<div><dt>Credential issuer</dt><dd>{{ run.target.issuer }}</dd></div>{% endif %}
+    <div><dt>Conformance suite</dt><dd>{{ run.suite.url or "–" }}{% if run.suite.version %} · {{ run.suite.version }}{% endif %}</dd></div>
+    <div><dt>Wallet</dt><dd>{{ run.wallet.type or "–" }}{% if run.wallet.image %} · <span class="mono">{{ run.wallet.image }}</span>{% endif %}</dd></div>
+    <div><dt>Totals</dt><dd>
+      {% for o in outcomes %}<span class="dot o-{{ o }}"></span>{{ totals[o] }} {{ labels[o] }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </dd></div>
+  </dl>
+
+  <div class="tiles">
+    {% for p in run.profiles %}{% set c = p.counts() %}{% set n = p.cases|length %}
+    <div class="tile" data-jump="{{ p.id }}" role="button" tabindex="0">
+      <div class="name">{{ p.title }}</div>
+      <div class="plan">{{ p.plan_name or p.kind }}</div>
+      <div class="bar">
+        {% for o in outcomes %}{% if c[o] %}<span class="o-{{ o }}" style="width: {{ (100 * c[o] / n) | round(2) }}%" title="{{ c[o] }} {{ labels[o] }}"></span>{% endif %}{% endfor %}
+      </div>
+      <div class="counts">
+        {% if p.error %}<span style="color:var(--regression)">profile error</span>{% endif %}
+        {% for o in outcomes %}{% if c[o] %}<span><span class="dot o-{{ o }}"></span><b>{{ c[o] }}</b> {{ labels[o] }}</span>{% endif %}{% endfor %}
+        {% if not n and not p.error %}<span>no cases</span>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="toolbar" role="toolbar" aria-label="Filters">
+    {% for o in outcomes %}<button class="chip" type="button" data-outcome="{{ o }}" aria-pressed="false"><span class="dot o-{{ o }}"></span>{{ labels[o] }}</button>{% endfor %}
+    <select id="pfilter" aria-label="Profile">
+      <option value="">All profiles</option>
+      {% for p in run.profiles %}<option value="{{ p.id }}">{{ p.title }}</option>{% endfor %}
+    </select>
+    <input id="q" type="search" placeholder="Search modules, conditions, messages" aria-label="Search">
+  </div>
+
+  {% for p in run.profiles %}
+  <section class="profile" id="p-{{ p.id }}" data-profile="{{ p.id }}">
+    <div class="profile-head">
+      <h2>{{ p.title }}</h2>
+      {% if p.plan_url %}<a href="{{ p.plan_url }}" target="_blank" rel="noopener">plan {{ p.plan_id }}</a>{% endif %}
+      {% if p.variant %}<span class="sub mono">{% for k, v in p.variant.items() %}{{ k }}={{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</span>{% endif %}
+    </div>
+    {% if p.error %}<div class="profile-err">{{ p.error }}</div>{% endif %}
+    <div class="cases">
+      {% for c in p.cases %}
+      <details class="case" data-outcome="{{ c.outcome }}" data-text="{{ (c.id ~ ' ' ~ (c.findings|map(attribute='condition')|join(' ')) ~ ' ' ~ (c.findings|map(attribute='message')|join(' ')) ~ ' ' ~ (c.reason or '') ~ ' ' ~ (c.error or ''))|lower }}">
+        <summary>
+          <span class="badge o-{{ c.outcome }}">{{ labels[c.outcome] }}</span>
+          <span>
+            <span class="case-id">{{ c.id }}</span>
+            {% set note = c.outcome_note or c.error or (c.reason if c.outcome == "known-failure" else none) %}
+            {% if note %}<div class="case-note">{{ note }}</div>{% endif %}
+          </span>
+          <span class="case-right">
+            <span class="mono">{{ c.status }}</span>
+            {% if c.duration_s %}<span>{{ c.duration_s }}s</span>{% endif %}
+          </span>
+        </summary>
+        <div class="body">
+          <dl class="kv">
+            <dt>Status</dt><dd>{{ c.status }}{% if c.expected %} (expected {{ c.expected }}){% endif %}</dd>
+            {% if c.reason %}<dt>{{ "Known gap" if c.outcome == "known-failure" else "Baseline note" }}</dt><dd>{{ c.reason }}</dd>{% endif %}
+            {% if c.issue %}<dt>Issue</dt><dd><a href="{{ c.issue }}" target="_blank" rel="noopener">{{ c.issue }}</a></dd>{% endif %}
+            {% if c.suite_log_url %}<dt>Suite log</dt><dd><a href="{{ c.suite_log_url }}" target="_blank" rel="noopener">{{ c.suite_test_id }}</a></dd>{% endif %}
+            {% if c.variant %}<dt>Variant</dt><dd class="mono">{% for k, v in c.variant.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+            {% if c.error %}<dt>Harness error</dt><dd>{{ c.error }}</dd>{% endif %}
+          </dl>
+          {% if c.findings %}
+          <ul class="findings">
+            {% for f in c.findings %}
+            <li class="r-{{ f.result }}">
+              <div><b>{{ f.result }}</b> <span class="cond">{{ f.condition }}</span></div>
+              <div>{{ f.message }}</div>
+              {% if f.requirements %}<div class="reqs">{{ f.requirements|join(" · ") }}</div>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% for s in c.steps %}
+          <div class="step">
+            <div class="step-head"><span class="badge {{ 'o-pass' if s.status in pass_statuses else ('o-skipped' if s.status == 'SKIPPED' else 'o-regression') }}">{{ s.status }}</span><b>{{ s.name }}</b></div>
+            {% if s.detail %}<div class="case-note" style="margin-top:4px">{{ s.detail }}</div>{% endif %}
+            {% for h in s.http %}
+            <details class="http">
+              <summary>{{ h.method }} {{ h.url }}{% if h.status %} → {{ h.status }}{% endif %}</summary>
+              {% if h.request %}<pre>{{ h.request }}</pre>{% endif %}
+              {% if h.response %}<pre>{{ h.response }}</pre>{% endif %}
+            </details>
+            {% endfor %}
+            {% if s.screenshots %}<div class="shots">{% for img in s.screenshots %}<img src="{{ img }}" alt="Screenshot from step {{ s.name }}" loading="lazy">{% endfor %}</div>{% endif %}
+          </div>
+          {% endfor %}
+          {% if not c.findings and not c.steps and not c.error %}<div class="sub">No findings.</div>{% endif %}
+        </div>
+      </details>
+      {% else %}
+      <div class="empty">No cases ran for this profile.</div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <footer>
+    <details>
+      <summary>Effective configuration (secrets redacted)</summary>
+      <pre>{{ config_json }}</pre>
+    </details>
+    <p>Generated by vcit {{ version }}.</p>
+  </footer>
+</div>
+<div id="lightbox" role="dialog" aria-label="Screenshot"><img alt=""></div>
+<script>
+(function () {
+  var root = document.documentElement;
+  try { var t = localStorage.getItem("vcit-theme"); if (t) root.setAttribute("data-theme", t); } catch (e) {}
+  document.getElementById("theme").addEventListener("click", function () {
+    var dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var next = dark ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("vcit-theme", next); } catch (e) {}
+  });
+
+  var active = new Set();
+  var chips = document.querySelectorAll(".chip");
+  var pf = document.getElementById("pfilter");
+  var q = document.getElementById("q");
+  function apply() {
+    var term = q.value.trim().toLowerCase();
+    document.querySelectorAll("section.profile").forEach(function (sec) {
+      var showSec = !pf.value || sec.dataset.profile === pf.value;
+      sec.hidden = !showSec;
+      if (!showSec) return;
+      sec.querySelectorAll("details.case").forEach(function (d) {
+        var ok = (!active.size || active.has(d.dataset.outcome)) && (!term || d.dataset.text.indexOf(term) !== -1);
+        d.hidden = !ok;
+      });
+    });
+  }
+  chips.forEach(function (c) {
+    c.addEventListener("click", function () {
+      var o = c.dataset.outcome;
+      if (active.has(o)) { active.delete(o); c.setAttribute("aria-pressed", "false"); }
+      else { active.add(o); c.setAttribute("aria-pressed", "true"); }
+      apply();
+    });
+  });
+  pf.addEventListener("change", apply);
+  q.addEventListener("input", apply);
+  document.querySelectorAll(".tile").forEach(function (t) {
+    function go() { pf.value = ""; apply(); document.getElementById("p-" + t.dataset.jump).scrollIntoView({ behavior: "smooth" }); }
+    t.addEventListener("click", go);
+    t.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  });
+
+  var lb = document.getElementById("lightbox");
+  document.querySelectorAll(".shots img").forEach(function (img) {
+    img.addEventListener("click", function () { lb.querySelector("img").src = img.src; lb.style.display = "flex"; });
+  });
+  lb.addEventListener("click", function () { lb.style.display = "none"; });
+
+  // Open regressions by default so the reader lands on what matters.
+  document.querySelectorAll('details.case[data-outcome="regression"]').forEach(function (d) { d.open = true; });
+})();
+</script>
+</body>
+</html>
