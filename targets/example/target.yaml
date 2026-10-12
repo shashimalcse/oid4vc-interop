@@ -1,0 +1,58 @@
+# Template target profile for a statically configured issuer and verifier (no hooks).
+#
+# 1. Run `vcit target-info --target targets/example` and register what it prints:
+#    the suite callback URLs and the Wallet2 redirect URI at your authorization server, the
+#    client keys, and trust in the test CA at your verifier. Use fixed key files (the `pki`
+#    and `jwk_file` entries) so you only do this once.
+# 2. Fill in the values below (or export the variables), then `vcit run --target targets/example`.
+
+name: example
+description: A statically configured OpenID4VCI issuer and OpenID4VP verifier
+
+issuer:
+  credential_issuer: "${ISSUER_URL:-https://issuer.example.com}"
+  credential_configuration_id: "${CREDENTIAL_CONFIGURATION_ID:-ExampleCredential}"
+  clients:
+    - client_id: "${CLIENT1_ID:-vcit-client-1}"
+      jwk_file: keys/client1.jwk.json
+    - client_id: "${CLIENT2_ID:-vcit-client-2}"
+      jwk_file: keys/client2.jwk.json
+  wallet_client:
+    client_id: "${WALLET_CLIENT_ID:-vcit-wallet}"
+    jwk_file: keys/wallet-client.jwk.json
+  login:
+    username: "${LOGIN_USERNAME:-test-user}"
+    password: "${LOGIN_PASSWORD:-change-me}"
+    # selectors: { username: ["#email"], submit: ["#login"] }   # only if the defaults miss your form
+  expected_claims:
+    given_name: Ada
+
+verifier:
+  start_presentation:
+    # Any HTTP call that answers with JSON containing the openid4vp:// request URL...
+    suite:
+      http:
+        method: POST
+        url: "${VERIFIER_URL:-https://verifier.example.com}/presentations"
+        json: { query: pid }
+      wallet_url: $.request_url
+      session: $.id
+    # ...or a page that shows it as a link (a QR-code page usually has one), or a command.
+    wallet:
+      browser:
+        url: "${VERIFIER_URL:-https://verifier.example.com}/login"
+        selector: "a[href^='openid4vp://']"
+  result:
+    http:
+      url: "${VERIFIER_URL:-https://verifier.example.com}/presentations/{{ session }}"
+    status: $.state
+    success: [verified]
+    pending: [pending]
+
+pki:
+  ca_cert_file: keys/test-ca.crt
+  ca_key_file: keys/test-ca.key
+
+profiles:
+  - vp-base
+  - vci-base
