@@ -1,0 +1,7 @@
+# oid4vci-1_0-issuer-haip-test-plan pins client_auth_type=client_attestation, which IS does
+# not implement (HAIP-GAPS #26), so every module that reaches the token endpoint fails.
+profile: vci-haip
+cases:
+  "*":
+    expect: FAILED
+    reason: "#26 attestation-based client authentication not implemented"

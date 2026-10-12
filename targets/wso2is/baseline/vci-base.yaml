@@ -1,0 +1,20 @@
+# Known gaps for oid4vci-1_0-issuer-test-plan against IS 7.4.0-SNAPSHOT.
+# Seeded from the 2026-08-30 run and HAIP-GAPS.md; refresh after each baseline run.
+profile: vci-base
+cases:
+  oid4vci-1_0-issuer-happy-flow*:
+    expect: FAILED
+    reason: "#19 pre-final credential response envelope is read as a deferred response"
+    conditions: [VCICheckForDeferredCredentialResponse]
+  oid4vci-1_0-issuer-fail-on-access-token-in-query:
+    expect: FAILED
+    reason: "#19 pre-final credential response envelope is read as a deferred response"
+    conditions: [VCICheckForDeferredCredentialResponse]
+  oid4vci-1_0-issuer-fail-missing-proof:
+    expect: FAILED
+    reason: "#1 a request without proof gets an unbound credential instead of 400"
+    conditions: [EnsureHttpStatusCodeIs400, VCIValidateCredentialErrorResponse]
+  oid4vci-1_0-issuer-fail-unknown-credential-*:
+    expect: FAILED
+    reason: "#20 credential_configuration_id / credential_identifier ignored in favour of scopes[0]"
+    conditions: [EnsureHttpStatusCodeIs400, VCIValidateCredentialErrorResponse]

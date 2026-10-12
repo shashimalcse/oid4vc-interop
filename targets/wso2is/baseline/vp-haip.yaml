@@ -1,0 +1,7 @@
+# Predicted gaps for oid4vp-1final-verifier-haip-test-plan (from HAIP-GAPS.md code reading;
+# not yet confirmed by a run). Replace with observed results after the first baseline run.
+profile: vp-haip
+cases:
+  oid4vp-1final-verifier-*:
+    expect: FAILED
+    reason: "VP-28/VP-11 pre-final client_metadata names; VP-39 no redirect_uri in the direct_post response"

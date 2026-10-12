@@ -1,0 +1,87 @@
+# WSO2 Identity Server 7.4+ as OpenID4VCI issuer and OpenID4VP verifier.
+#
+# hooks/setup.py provisions everything per run through the IS admin APIs (VC template, user,
+# OAuth apps, presentation definitions) and hooks/teardown.py removes it.
+# Copy local.env.example to local.env (gitignored) or export the variables.
+
+name: wso2is
+description: WSO2 Identity Server (OID4VCI issuer + OID4VP verifier)
+env_files: [local.env]
+
+issuer:
+  credential_issuer: "${IS_PUBLIC_URL}/oid4vci"
+  credential_configuration_id: "${setup.credential_configuration_id}"
+  clients:
+    - client_id: "${setup.clients.0.client_id}"
+    - client_id: "${setup.clients.1.client_id}"
+  wallet_client:
+    client_id: "${setup.wallet_client.client_id}"
+  login:
+    username: "${setup.user.username}"
+    password: "${setup.user.password}"
+  expected_claims:
+    given_name: Ada
+    family_name: Lovelace
+    email: ada@example.org
+  credential_trust_anchor:
+    pem: "${setup.credential_trust_anchor_pem}"
+
+verifier:
+  start_presentation:
+    suite:
+      http:
+        method: POST
+        url: "${IS_ADMIN_URL}/oid4vp/verification-sessions"
+        auth:
+          username: "${IS_ADMIN_USER}"
+          password: "${IS_ADMIN_PASSWORD}"
+        json:
+          presentationDefinitionIdentifier: "${setup.presentation_definitions.suite}"
+      wallet_url: $.walletUrl
+      session: $.requestId
+    wallet:
+      http:
+        method: POST
+        url: "${IS_ADMIN_URL}/oid4vp/verification-sessions"
+        auth:
+          username: "${IS_ADMIN_USER}"
+          password: "${IS_ADMIN_PASSWORD}"
+        json:
+          presentationDefinitionIdentifier: "${setup.presentation_definitions.wallet}"
+      wallet_url: $.walletUrl
+      session: $.requestId
+  result:
+    http:
+      url: "${IS_ADMIN_URL}/oid4vp/verification-sessions/{{ session }}/status"
+      auth:
+        username: "${IS_ADMIN_USER}"
+        password: "${IS_ADMIN_PASSWORD}"
+    status: $.status
+    success: [VERIFIED]
+    pending: [ACTIVE]
+    details:
+      url: "${IS_ADMIN_URL}/oid4vp/verification-sessions/{{ session }}"
+      auth:
+        username: "${IS_ADMIN_USER}"
+        password: "${IS_ADMIN_PASSWORD}"
+
+hooks:
+  setup: [python, hooks/setup.py]
+  teardown: [python, hooks/teardown.py]
+
+baseline_dir: baseline
+
+profiles:
+  - vci-base
+  - vci-haip
+  - vp-base
+  - vp-haip
+  - wallet-interop
+
+suite:
+  mode: managed
+wallet:
+  mode: managed
+report:
+  out_dir: ./out
+  fail_on: regression

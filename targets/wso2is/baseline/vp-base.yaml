@@ -1,0 +1,22 @@
+# Baseline for oid4vp-1final-verifier-test-plan (vp_profile=plain_vp, sd_jwt_vc, x509_san_dns,
+# request_uri_signed, direct_post.jwt). Observed 2026-10-12 against IS 7.4.0-SNAPSHOT
+# (identity-openid4vc 1.1.16). Numbers in brackets refer to the gap analysis.
+#
+# Every module fails while validating IS's signed request, before the presentation matters.
+# Not yet visible to the suite: IS also rejects the suite's SD-JWT with server_error
+# ("Hash algorithm cannot be null"): it does not default a missing _sd_alg to sha-256.
+profile: vp-base
+cases:
+  "oid4vp-1final-verifier-*":
+    expect: FAILED
+    reason: >-
+      [#11] self-signed request-object leaf; [#7] client_id_scheme still sent;
+      [#6] client_metadata lacks vp_formats_supported; [#5] encryption JWK has no alg
+    conditions:
+      - ValidateRequestObjectSignatureAgainstX5cHeader
+      - CheckNoClientIdSchemeParameter
+      - VP1FinalValidateVpFormatsSupportedInClientMetadata
+      - VP1FinalValidateClientMetadataJwksForEncryptedResponse
+  oid4vp-1final-verifier-request-uri-method-post:
+    expect: SKIPPED
+    reason: "[VP-43] request_uri_method=post not offered (optional)"

@@ -1,0 +1,3 @@
+# Wallet2 interop checks. Empty until the first baseline run.
+profile: wallet-interop
+cases: {}
