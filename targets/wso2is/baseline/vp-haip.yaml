@@ -1,27 +1,25 @@
 # Baseline for oid4vp-1final-verifier-haip-test-plan (haip, x509_hash, request_uri_signed,
 # sd_jwt_vc, direct_post.jwt). Observed 2026-10-12 against IS 7.4.0-SNAPSHOT (identity-openid4vc
-# 1.1.16) configured for x509_hash. Numbers in brackets refer to the gap analysis.
+# 1.1.16) configured for x509_hash + direct_post.jwt. Numbers in brackets refer to the gap analysis.
 #
-# IS sent response_mode=direct_post with no client_metadata.jwks, so the suite could not encrypt
-# a response and never posted one: none of the presentation checks ran.
+# The suite now posts encrypted presentations and IS decrypts them, but IS rejects every one:
+# server_error from the missing-_sd_alg digest bug, except invalid-credential-signature
+# (VPV-60011, a correct rejection). IS answers the POST with 200 {} (no redirect_uri).
 profile: vp-haip
 cases:
   "oid4vp-1final-verifier-*":
     expect: FAILED
     reason: >-
-      response_mode is direct_post, not direct_post.jwt, and client_metadata has no jwks or
-      encrypted_response_enc_values_supported (HAIP 5); [#11] self-signed request leaf;
-      [#7] client_id_scheme sent; [#6] vp_formats instead of vp_formats_supported
+      [#11] self-signed request leaf; [#7] client_id_scheme sent; [#6] vp_formats instead of
+      vp_formats_supported; [#5] encryption JWK has no alg; HAIP 5: no encrypted_response_enc_values_supported;
+      [VP-39] direct_post response has no redirect_uri
     conditions:
       - ValidateRequestObjectSignatureAgainstX5cHeader
-      - ValidateResponseMode
       - CheckNoClientIdSchemeParameter
       - VP1FinalValidateVpFormatsSupportedInClientMetadata
-      - VP1FinalCheckForKeyIdInClientMetadataJWKs
       - VP1FinalValidateClientMetadataJwksForEncryptedResponse
       - ValidateVpClientMetadataEncryptionForHaip
-      - VP1FinalCheckEncryptionKeyNotReused
-      - VP1FinalEncryptVPResponse
+      - VP1FinalEnsureDirectPostResponseHasRedirectUriForHaip
   oid4vp-1final-verifier-request-uri-method-post:
     expect: SKIPPED
     reason: "[VP-43] request_uri_method=post not offered (optional)"
