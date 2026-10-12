@@ -1,0 +1,69 @@
+# Managed services for vcit. `vcit up` selects the compose profiles from the run config:
+#   suite  - OIDF conformance suite (mongodb + server + nginx)
+#   wallet - walt.id Wallet2
+#
+# vcit itself runs on the host (or the CI runner VM), not in a container. It needs docker to
+# restart Wallet2 after rendering its trust configuration. The suite is reachable from the host
+# as localhost.emobix.co.uk (127.0.0.1 in public DNS; a network alias inside the network).
+# The issuer/verifier under test must be reachable under the same URL from the host and from
+# these containers (a public URL, host.docker.internal, or a service on this compose network).
+
+name: vcit
+
+services:
+  mongodb:
+    profiles: [suite]
+    image: mongo:6.0.13
+    volumes:
+      - mongo-data:/data/db
+
+  server:
+    profiles: [suite]
+    image: registry.gitlab.com/openid/conformance-suite:${SUITE_IMAGE_TAG:-latest}
+    environment:
+      BASE_URL: https://localhost.emobix.co.uk:8443
+      BASE_MTLS_URL: https://localhost.emobix.co.uk:8444
+      MONGODB_HOST: mongodb
+      SPRING_PROFILES_ACTIVE: dev
+      # Login providers must be configured even though devmode skips login.
+      OIDC_GOOGLE_CLIENTID: google-client
+      OIDC_GOOGLE_SECRET: google-secret
+      OIDC_GITLAB_CLIENTID: gitlab-client
+      OIDC_GITLAB_SECRET: gitlab-secret
+    depends_on: [mongodb]
+
+  nginx:
+    profiles: [suite]
+    image: registry.gitlab.com/openid/conformance-suite/nginx:${SUITE_IMAGE_TAG:-latest}
+    ports:
+      - "8443:8443"
+      - "8444:8444"
+    networks:
+      default:
+        aliases:
+          # the suite calls its own public hostname; resolve it to nginx inside the network
+          - localhost.emobix.co.uk
+    depends_on: [server]
+
+  wallet2:
+    profiles: [wallet]
+    image: ${WALLET2_IMAGE:-waltid/wallet-api2:1.1.1}
+    ports:
+      - "7006:7006"
+    environment:
+      # Trust the target's TLS certificate (truststore rendered by vcit). Test deployments use
+      # self-signed certificates whose names rarely match, so hostname checks are off.
+      JAVA_TOOL_OPTIONS: >-
+        -Djavax.net.ssl.trustStore=/vcit/truststore.p12
+        -Djavax.net.ssl.trustStorePassword=changeit
+        -Djavax.net.ssl.trustStoreType=PKCS12
+        -Djdk.internal.httpclient.disableHostnameVerification=true
+    volumes:
+      - ${VCIT_STATE_DIR:-../.vcit}/wallet2/config:/waltid-wallet-api2/config
+      - ${VCIT_STATE_DIR:-../.vcit}/wallet2/trust:/vcit
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+
+volumes:
+  mongo-data:

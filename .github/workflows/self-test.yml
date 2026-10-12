@@ -1,0 +1,39 @@
+name: self-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Target profile directory to run end to end (must be reachable from the runner)
+        required: true
+        default: targets/example
+      profiles:
+        description: Space-separated profiles (empty = those in target.yaml)
+        required: false
+        default: ""
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e '.[dev]'
+      - run: pytest -q
+
+  interop:
+    if: github.event_name == 'workflow_dispatch'
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          target: ${{ inputs.target }}
+          profiles: ${{ inputs.profiles }}

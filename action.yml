@@ -1,0 +1,81 @@
+name: OpenID4VC conformance and wallet interop
+description: >-
+  Runs the OIDF conformance suite (base/HAIP OpenID4VCI and OpenID4VP) and walt.id Wallet2
+  interop checks against any credential issuer and verifier described by a target profile,
+  and publishes an HTML report.
+
+inputs:
+  target:
+    description: Target profile directory (holds target.yaml and baseline/)
+    required: true
+  profiles:
+    description: Space-separated test profiles to run (default; those listed in target.yaml)
+    required: false
+    default: ""
+  modules:
+    description: Space-separated module/check substrings to run (default; all)
+    required: false
+    default: ""
+  fail-on:
+    description: "regression | any-failure | never"
+    required: false
+    default: regression
+  artifact-name:
+    description: Name of the uploaded report artifact
+    required: false
+    default: vcit-report
+
+outputs:
+  report-dir:
+    description: Directory holding report.html, results.json and junit.xml
+    value: ${{ steps.run.outputs.report-dir }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install vcit
+      shell: bash
+      run: |
+        # Editable, so vcit finds docker/compose.yaml next to its sources.
+        python -m pip install --quiet -e "${{ github.action_path }}"
+        python -m playwright install --with-deps chromium
+
+    - name: Start conformance suite and Wallet2
+      shell: bash
+      env:
+        VCIT_STATE_DIR: ${{ runner.temp }}/vcit-state
+      run: vcit up --target "${{ inputs.target }}"
+
+    - name: Run
+      id: run
+      shell: bash
+      env:
+        VCIT_STATE_DIR: ${{ runner.temp }}/vcit-state
+      run: |
+        args=(--target "${{ inputs.target }}" --out "${{ runner.temp }}/vcit-out" --fail-on "${{ inputs.fail-on }}")
+        for p in ${{ inputs.profiles }}; do args+=(--profile "$p"); done
+        for m in ${{ inputs.modules }}; do args+=(--module "$m"); done
+        set +e
+        vcit run "${args[@]}"
+        rc=$?
+        echo "report-dir=$(ls -d "${{ runner.temp }}"/vcit-out/*/ | tail -1)" >> "$GITHUB_OUTPUT"
+        exit $rc
+
+    - name: Upload report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ runner.temp }}/vcit-out
+        if-no-files-found: warn
+
+    - name: Stop services
+      if: always()
+      shell: bash
+      env:
+        VCIT_STATE_DIR: ${{ runner.temp }}/vcit-state
+      run: vcit down --target "${{ inputs.target }}" --volumes || true
