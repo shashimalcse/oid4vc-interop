@@ -149,3 +149,36 @@ def test_python_hook_uses_vcit_interpreter():
 
     assert resolve_command(["python", "x.py"]) == [sys.executable, "x.py"]
     assert resolve_command(["node", "x.js"]) == ["node", "x.js"]
+
+
+@respx.mock
+def test_eudi_driver_issuance_round_trip():
+    from vcit.config.schema import WalletConfig
+    from vcit.wallets.driver import EudiDriver
+
+    d = EudiDriver(WalletConfig(type="eudi"))
+    respx.post("http://localhost:7007/wallets/w1/issuance/authorize").mock(
+        return_value=httpx.Response(200, json={"ok": True, "sessionId": "s1", "authorizationUrl": "https://as/authorize?x=1"}))
+    done = respx.post("http://localhost:7007/wallets/w1/issuance/complete").mock(
+        return_value=httpx.Response(200, json={"ok": True, "credentialIds": ["c1"], "credentials": ["a.b.c~d~"]}))
+    iss = d.start_issuance("w1", "k", {"credential_issuer": "https://is"}, "Badge", "public-client", "https://cb")
+    assert iss.authorization_url.startswith("https://as/")
+    ids = d.complete_issuance("w1", iss, "https://cb?code=abc&state=st&iss=https%3A%2F%2Fas")
+    sent = json.loads(done.calls.last.request.content)
+    assert sent == {"sessionId": "s1", "code": "abc", "state": "st", "iss": "https://as"}
+    assert ids == ["c1"] and d.credential("w1", "c1") == "a.b.c~d~"
+    assert d.client_auth == "public"
+
+
+def test_login_error_page_detection():
+    from unittest.mock import MagicMock
+
+    from vcit.browser.login import _looks_like_error
+
+    for url, want in [("https://t/gate/error?errorCode=invalid_request", True),
+                      ("https://wallet.vcit.invalid/cb?code=abc&state=s", False),
+                      ("https://is/authenticationendpoint/oauth2_error.do?oauthErrorCode=x", True),
+                      ("https://t/gate/signin?authId=1&executionId=2", False)]:
+        page = MagicMock()
+        page.url = url
+        assert _looks_like_error(page) is want, url

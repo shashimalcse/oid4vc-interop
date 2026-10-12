@@ -122,6 +122,21 @@ class ThunderAdmin:
         }
         return self._post("/applications", body)["id"]
 
+    def create_public_wallet_app(self, name: str, client_id: str, redirect_uris: list[str], scopes: list[str]) -> str:
+        """A `wallet` template public client (no client authentication): PKCE, PAR, DPoP."""
+        body = {
+            "name": name, "ouId": self.ou, "type": "mobile", "template": "wallet",
+            "allowedUserTypes": ["Person"],
+            "inboundAuthConfig": [{"type": "oauth2", "config": {
+                "clientId": client_id, "redirectUris": redirect_uris,
+                "grantTypes": ["authorization_code", "refresh_token"], "responseTypes": ["code"],
+                "tokenEndpointAuthMethod": "none", "publicClient": True,
+                "pkceRequired": True, "requirePushedAuthorizationRequests": True,
+                "dpopBoundAccessTokens": True, "scopes": ["openid", *scopes],
+            }}],
+        }
+        return self._post("/applications", body)["id"]
+
     def delete_app(self, app_id: str) -> None:
         self._delete(f"/applications/{app_id}")
 

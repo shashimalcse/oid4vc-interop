@@ -26,6 +26,7 @@ def main() -> None:
         "credential_configuration_id": UNUSED,
         "clients": [{"client_id": UNUSED}, {"client_id": UNUSED}],
         "wallet_client": {"client_id": UNUSED},
+        "public_client": {"client_id": UNUSED},
         "user": {"username": UNUSED, "password": UNUSED},
         "presentation_definitions": {"suite": UNUSED, "wallet": UNUSED},
         "credential_trust_anchor_pem": admin.signing_cert_pem(),
@@ -63,6 +64,11 @@ def main() -> None:
                 admin.authorize_api(app["id"], resource, identifier)
                 out["wallet_client"] = {"client_id": app["client_id"]}
                 log(f"application {tag}-wallet")
+                public = admin.create_public_app(f"{tag}-public-wallet", [ctx["wallet"]["redirect_uri"]])
+                cleanup["apps"].append(public["id"])
+                admin.authorize_api(public["id"], resource, identifier)
+                out["public_client"] = {"client_id": public["client_id"]}
+                log(f"application {tag}-public-wallet (public client)")
 
                 # IS issues vct = template identifier, iss = the credential issuer URL, signed
                 # with its primary key (no x5c), so it is trusted by certificate.

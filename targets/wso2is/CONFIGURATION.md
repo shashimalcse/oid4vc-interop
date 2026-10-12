@@ -167,3 +167,4 @@ Preflight stops early with a clear message if the issuer metadata, suite or wall
 | The suite reports a client_id prefix mismatch | the tenant `clientIdScheme` differs from the plan variant (section 5) |
 | Wallet2 gets `406 Not Acceptable` fetching `request_uri` | a known IS behaviour: the request endpoint only serves `Accept: application/oauth-authz-req+jwt`. Recorded in `baseline/wallet-vp.yaml`. |
 | The EUDI wallet refuses with "`response_uri` host doesn't match" | the tenant is on `x509_san_dns`; switch to `x509_hash` (section 5) |
+| The login browser stops on an ngrok "You are about to visit" page | ngrok's free-tier interstitial; `target.yaml` sends `ngrok-skip-browser-warning` through `issuer.login.headers` |

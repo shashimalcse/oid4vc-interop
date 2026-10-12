@@ -8,6 +8,7 @@
  *   POST /wallets/{id}/credentials   {raw}            -> {credentialId} (SD-JWT VC)
  *   POST /wallets/{id}/presentations/resolve {requestUrl}  resolve + validate only
  *   POST /wallets/{id}/presentations         {requestUrl}  resolve, build vp_token, send
+ *   POST /wallets/{id}/issuance/authorize|complete             OpenID4VCI (see Issuance.kt)
  *
  * Trust anchors for signed requests (x509_san_dns / x509_hash) are read from
  * $VCIT_TRUST_ANCHORS (a PEM bundle) on every request, so vcit can change them without a restart.
@@ -115,7 +116,7 @@ private object InsecureTls : X509TrustManager {
 @Serializable
 data class HttpRecord(val method: String, val url: String, val status: Int, val body: String)
 
-private class RecordingClient {
+internal class RecordingClient {
     val records = mutableListOf<HttpRecord>()
     val client: HttpClient = HttpClient(OkHttp) {
         engine {
@@ -139,12 +140,12 @@ private class RecordingClient {
 
 // -- wallet state ----------------------------------------------------------------------------------
 
-private class Wallet {
+internal class WalletState {
     var key: ECKey? = null
     val credentials = ConcurrentHashMap<String, String>()
 }
 
-private val wallets = ConcurrentHashMap<String, Wallet>()
+private val wallets = ConcurrentHashMap<String, WalletState>()
 
 private val config = OpenId4VPConfig(
     vpFormatsSupported = VpFormatsSupported(VpFormatsSupported.SdJwtVc.HAIP, null),
@@ -208,7 +209,7 @@ private fun sha256b64(s: String): String =
     Base64URL.encode(MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.US_ASCII))).toString()
 
 /** The stored credential for a DCQL query: matching vct_values if given, else the first one. */
-private fun pick(wallet: Wallet, vctValues: List<String>?): String? =
+private fun pick(wallet: WalletState, vctValues: List<String>?): String? =
     wallet.credentials.values.firstOrNull { raw ->
         vctValues.isNullOrEmpty() || run {
             val payload = SignedJWT.parse(raw.substringBefore("~")).jwtClaimsSet
@@ -230,7 +231,7 @@ private fun presentation(raw: String, key: ECKey, request: ResolvedRequestObject
     return withoutKb + kb.serialize()
 }
 
-private suspend fun present(wallet: Wallet, url: String, send: Boolean): Any {
+private suspend fun present(wallet: WalletState, url: String, send: Boolean): Any {
     val rec = RecordingClient()
     rec.client.use { http ->
         val vp = OpenId4Vp.overRedirects(config, http)
@@ -293,10 +294,10 @@ fun main() {
     embeddedServer(Netty, port = port) {
         install(ServerContentNegotiation) { json(json) }
         routing {
-            get("/health") { call.respond(mapOf("status" to "ok", "library" to "eudi-lib-jvm-openid4vp-kt 0.16.2")) }
+            get("/health") { call.respond(mapOf("status" to "ok", "library" to "eudi-lib-jvm-openid4vp-kt 0.16.2, eudi-lib-jvm-openid4vci-kt 0.14.1")) }
             post("/wallets") {
                 val id = UUID.randomUUID().toString()
-                wallets[id] = Wallet()
+                wallets[id] = WalletState()
                 call.respond(HttpStatusCode.Created, mapOf("walletId" to id))
             }
             post("/wallets/{id}/keys") {
@@ -313,6 +314,14 @@ fun main() {
                 val id = UUID.randomUUID().toString()
                 w.credentials[id] = raw
                 call.respond(HttpStatusCode.Created, mapOf("credentialId" to id))
+            }
+            post("/wallets/{id}/issuance/authorize") {
+                wallets[call.parameters["id"]] ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "no such wallet"))
+                call.respond(startIssuance(call.receive<AuthorizeIssuance>()))
+            }
+            post("/wallets/{id}/issuance/complete") {
+                val w = wallets[call.parameters["id"]] ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "no such wallet"))
+                call.respond(completeIssuance(w, call.receive<CompleteIssuance>()))
             }
             post("/wallets/{id}/presentations/resolve") {
                 val w = wallets[call.parameters["id"]] ?: return@post call.respond(HttpStatusCode.NotFound, mapOf("error" to "no such wallet"))

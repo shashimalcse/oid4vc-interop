@@ -14,11 +14,15 @@ issuer:
   clients:
     - client_id: "${setup.clients.0.client_id}"
     - client_id: "${setup.clients.1.client_id}"
-  wallet_client:
+  wallet_client:          # private_key_jwt client (Wallet2)
     client_id: "${setup.wallet_client.client_id}"
+  public_client:          # public client (the EUDI wallet supports no private_key_jwt)
+    client_id: "${setup.public_client.client_id}"
   login:
     username: "${setup.user.username}"
     password: "${setup.user.password}"
+    headers:                               # skip ngrok's free-tier browser interstitial
+      ngrok-skip-browser-warning: "1"
   expected_claims:
     given_name: Ada
     family_name: Lovelace

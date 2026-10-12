@@ -11,6 +11,7 @@ val ktor = "3.3.3"
 
 dependencies {
     implementation("eu.europa.ec.eudi:eudi-lib-jvm-openid4vp-kt:0.16.2")
+    implementation("eu.europa.ec.eudi:eudi-lib-jvm-openid4vci-kt:0.14.1")
     implementation("io.ktor:ktor-server-netty:$ktor")
     implementation("io.ktor:ktor-server-content-negotiation:$ktor")
     implementation("io.ktor:ktor-client-okhttp:$ktor")

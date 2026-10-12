@@ -143,7 +143,7 @@ class VciWaitingHandler:
 
         try:
             res = self.ctx.browser.login(
-                url, login.username, login.password, done, trace_name=m.test_id, selectors=login.selectors
+                url, login.username, login.password, done, trace_name=m.test_id, selectors=login.selectors, headers=login.headers
             )
             m.scratch["last_screenshot"] = res.screenshots[-1] if res.screenshots else None
             m.steps.append(Step("browser: login and redirect", "PASSED", res.final_url, screenshots=res.screenshots[-1:]))

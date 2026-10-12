@@ -18,7 +18,7 @@ report. vcit combines two kinds of evidence:
 | `vp-base` | suite `oid4vp-1final-verifier-test-plan` (`vp_profile=plain_vp`) | verifier |
 | `vp-haip` | suite `oid4vp-1final-verifier-haip-test-plan` | verifier |
 | `wallet-vp` | each wallet presents a test PID (signed by the run's test CA) | verifier |
-| `wallet-interop` | Wallet2: issuance, then presentation (EUDI issuance to come) | issuer + verifier |
+| `wallet-interop` | each wallet: authorization-code issuance (browser login), then presentation | issuer + verifier |
 
 ## Target profiles
 

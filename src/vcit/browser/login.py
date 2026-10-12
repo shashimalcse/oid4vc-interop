@@ -106,8 +106,8 @@ class Browser:
         self._browser = self._pw = None
 
     @contextmanager
-    def page(self, trace_name: str | None = None) -> Iterator[Page]:
-        context = self._ensure().new_context(ignore_https_errors=True)
+    def page(self, trace_name: str | None = None, headers: dict[str, str] | None = None) -> Iterator[Page]:
+        context = self._ensure().new_context(ignore_https_errors=True, extra_http_headers=headers or None)
         if trace_name:
             context.tracing.start(screenshots=True, snapshots=True)
         try:
@@ -127,6 +127,7 @@ class Browser:
         timeout_s: float = 60,
         trace_name: str | None = None,
         selectors=None,
+        headers: dict[str, str] | None = None,
     ) -> LoginResult:
         """Open `url`, log in if asked, approve consent, and stop when `done(page)` is true.
 
@@ -135,7 +136,7 @@ class Browser:
         """
         result = LoginResult(final_url=url)
         sel = Selectors.merged(selectors)
-        with self.page(trace_name) as page:
+        with self.page(trace_name, headers) as page:
             caught: list[str] = []
             if intercept:
                 pattern = re.compile("^" + re.escape(intercept))
@@ -145,6 +146,14 @@ class Browser:
                     route.fulfill(status=200, content_type="text/html", body="<p>vcit: redirect captured</p>")
 
                 page.route(pattern, answer)
+
+                # A server-side 302 to the redirect_uri is not passed to route handlers (only the
+                # first URL of a redirect chain is), so also watch the requests themselves.
+                def seen(request) -> None:
+                    if pattern.match(request.url) and request.url not in caught:
+                        caught.append(request.url)
+
+                page.on("request", seen)
             def record(frame) -> None:
                 if frame == page.main_frame:
                     result.trail.append(frame.url)

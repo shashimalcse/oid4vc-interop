@@ -73,6 +73,11 @@ class Issuer:
             raise IssuerError("issuer.wallet_client is required for wallet-interop")
         return self.cfg.wallet_client.client_id, self.ctx.keys.wallet_client
 
+    def public_client(self) -> str:
+        if self.cfg.public_client is None:
+            raise IssuerError("issuer.public_client is required for wallets that only use public clients (eudi)")
+        return self.cfg.public_client.client_id
+
     def login(self) -> Login:
         if self.cfg.login is None:
             raise IssuerError("issuer.login is required: the authorization-code flow logs a user in")

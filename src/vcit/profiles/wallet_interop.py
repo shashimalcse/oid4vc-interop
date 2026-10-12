@@ -26,7 +26,7 @@ from ..core.sdjwt import issue_sd_jwt_vc
 from ..target.issuer import IssuerError
 from ..target.verifier import VerifierError
 from ..wallets import waltid_config
-from ..wallets.driver import Wallet2Driver, WalletDriver
+from ..wallets.driver import WalletDriver
 from ..wallets.waltid import WalletError, find_sd_jwt
 from .base import Profile
 
@@ -196,16 +196,14 @@ class WalletVpProfile(_WalletProfile):
 
 class WalletInteropProfile(_WalletProfile):
     id = "wallet-interop"
-    title = "Wallet interop (walt.id Wallet2, issuer to verifier)"
+    title = "Wallet interop (real wallets, issuer to verifier)"
     trigger = "wallet"
 
     def drivers(self) -> list[WalletDriver]:
-        # Issuance is implemented for Wallet2 only so far.
-        return [d for d in self.ctx.wallets if isinstance(d, Wallet2Driver)]
+        return self.ctx.wallets
 
     def provision(self) -> None:
         self.ctx.issuer.login()
-        self.ctx.issuer.wallet_client()
         self._configure_wallet_trust()
 
     def expected_claims(self) -> dict[str, Any]:
@@ -223,35 +221,40 @@ class WalletInteropProfile(_WalletProfile):
             ("presentation.verified", self._verified),
         ]
 
+    def _client(self) -> tuple[str, Any]:
+        """The issuer client this wallet authenticates as, and the key it binds credentials to."""
+        if self.driver.client_auth == "public":
+            holder = self.ctx.keys.pki.self_signed(f"{self.driver.name}-holder", "vcit wallet holder")
+            return self.ctx.issuer.public_client(), holder
+        return self.ctx.issuer.wallet_client()
+
     def _setup(self, case: Case) -> None:
-        w = self.driver.client
-        _, key = self.ctx.issuer.wallet_client()
-        self.state["wallet_id"] = w.create_wallet()
-        self.state["key_id"] = w.import_jwk(self.state["wallet_id"], key.private_jwk())
-        case.steps.append(Step("wallet created; client key imported", "PASSED", f"keyId {self.state['key_id']}"))
+        client_id, key = self._client()
+        self.state["client_id"] = client_id
+        self.state["wallet_id"] = self.driver.create_wallet()
+        self.state["key_id"] = self.driver.import_key(self.state["wallet_id"], key.private_jwk())
+        case.steps.append(Step("wallet created; key imported", "PASSED",
+                               f"client {client_id} ({self.driver.client_auth}), keyId {self.state['key_id']}"))
 
     def _authorization_url(self, case: Case) -> None:
-        client_id, _ = self.ctx.issuer.wallet_client()
-        res = self.driver.client.authorization_url(
-            self.state["wallet_id"],
-            self.ctx.issuer.credential_issuer,
-            [self.ctx.target.issuer.credential_configuration_id],
-            client_id,
-            WALLET_REDIRECT_URI,
+        issuance = self.driver.start_issuance(
+            self.state["wallet_id"], self.state["key_id"], self.ctx.issuer.metadata,
+            self.ctx.target.issuer.credential_configuration_id, self.state["client_id"], WALLET_REDIRECT_URI,
         )
-        self.state["auth"] = res
-        case.steps.append(Step("Wallet2 built the authorization request", "PASSED", res["authorizationUrl"]))
+        self.state["issuance"] = issuance
+        case.steps.append(Step("the wallet built the authorization request", "PASSED", issuance.authorization_url))
 
     def _login(self, case: Case) -> None:
         login = self.ctx.issuer.login()
         res = self.ctx.browser.login(
-            self.state["auth"]["authorizationUrl"],
+            self.state["issuance"].authorization_url,
             login.username,
             login.password,
             done=lambda page: False,
             intercept=WALLET_REDIRECT_URI,
-            trace_name="wallet-login",
+            trace_name=f"{self.driver.name}-login",
             selectors=login.selectors,
+            headers=login.headers,
         )
         params = parse_qs(urlparse(res.final_url).query)
         case.steps.append(Step("login at the authorization server", "PASSED", " → ".join(res.trail[-4:]),
@@ -260,34 +263,15 @@ class WalletInteropProfile(_WalletProfile):
             raise Blocked(f"redirected with error={params['error'][0]}: {params.get('error_description', [''])[0]}")
         if "code" not in params:
             raise Blocked(f"no authorization code in redirect {res.final_url}")
-        self.state["code"] = params["code"][0]
+        self.state["redirect"] = res.final_url
 
     def _credential(self, case: Case) -> None:
-        meta = self.ctx.issuer.metadata
-        auth = self.state["auth"]
-        client_id, _ = self.ctx.issuer.wallet_client()
-        body = {
-            "code": self.state["code"],
-            "codeVerifier": auth["codeVerifier"],
-            "credentialIssuer": auth.get("credentialIssuerBaseUrl") or self.ctx.issuer.credential_issuer,
-            "credentialEndpoint": meta["credential_endpoint"],
-            "credentialConfigurationId": self.ctx.target.issuer.credential_configuration_id,
-            "clientId": client_id,
-            "redirectUri": WALLET_REDIRECT_URI,
-            "keyId": self.state["key_id"],
-            "useDpop": True,
-        }
-        if meta.get("nonce_endpoint"):
-            body["nonceEndpoint"] = meta["nonce_endpoint"]
-        res = self.driver.client.receive_authorized(self.state["wallet_id"], body)
-        ids = res.get("credentialIds") or []
-        if not ids:
-            raise Blocked(f"Wallet2 stored no credential (deferred: {res.get('deferredTransactionIds')})")
+        ids = self.driver.complete_issuance(self.state["wallet_id"], self.state["issuance"], self.state["redirect"])
         self.state["credential_id"] = ids[0]
+        case.steps.append(Step("credential issued and stored", "PASSED", f"{len(ids)} credential(s)"))
 
     def _stored(self, case: Case) -> None:
-        stored = self.driver.client.get_credential(self.state["wallet_id"], self.state["credential_id"])
-        sd_jwt = find_sd_jwt(stored)
+        sd_jwt = self.driver.credential(self.state["wallet_id"], self.state["credential_id"])
         if not sd_jwt:
             raise Blocked("stored credential is not an SD-JWT")
         payload, claims = disclosed_claims(sd_jwt)
@@ -305,4 +289,3 @@ class WalletInteropProfile(_WalletProfile):
         )
         if problems:
             raise ValueError("; ".join(problems))
-

@@ -28,6 +28,10 @@ server:
   hostname: "0.0.0.0"
   public_url: "https://thunder.localtest.me:8090"   # issuer, request_uri and response_uri are built from it
 
+oauth:
+  par:
+    require_par: true               # advertised in AS metadata, so wallets know to use PAR
+
 openid4vp:
   client_id_scheme: "x509_hash"     # the request certificate's SAN is "localhost", so x509_san_dns
                                      # would not match the response_uri host and wallets refuse
@@ -77,5 +81,5 @@ rm -rf targets/thunderid/.state
 |---|---|
 | Setup fails with `failed to load trust anchor "vcit"` | `keys/test-ca.crt` is missing; run `vcit keygen --target targets/thunderid` |
 | Hooks fail at `admin login did not complete` | wrong admin password; the volumes keep the first setup's password |
-| PAR returns `invalid_target ... no default resource server` | a known ThunderID gap (see baseline). `PUT /server-config/defaultResourceServer` can work around it, but that changes token audiences server-wide |
+| PAR returns `invalid_target ... no default resource server` | a known ThunderID gap (see baseline). Set `THUNDER_DEFAULT_RESOURCE_SERVER=1` to have the hook bind requests to a per-run resource server and restore the setting afterwards |
 | Wallets refuse the request: `aud` missing | a known gap (see baseline) |

@@ -1,4 +1,5 @@
-# Wallet2 issuance from IS, then presentation. Observed 2026-10-12 (IS 7.4.0-SNAPSHOT, Wallet2 1.1.1).
+# Real wallets: issuance from IS, then presentation. Observed 2026-10-12 (IS 7.4.0-SNAPSHOT,
+# walt.id Wallet2 1.1.1, EUDI openid4vci 0.14.1).
 profile: wallet-interop
 cases:
   waltid-wallet2/issuance.authorization-url:
@@ -6,4 +7,10 @@ cases:
     reason: >-
       IS RFC 8414 metadata (/.well-known/oauth-authorization-server/...) advertises scopes_supported: []
       (its OIDC discovery lists real scopes, and neither lists the VC template scope); Wallet2 rejects
-      an empty scopes_supported. Also no dpop_signing_alg_values_supported (gap #24).
+      an empty scopes_supported.
+  eudi/issuance.credential:
+    expect: FAILED
+    reason: >-
+      Token request rejected "DPoP header is required": IS does not advertise
+      dpop_signing_alg_values_supported (gap #24), so wallets that use DPoP when supported (the EUDI
+      library) send none, while the app requires DPoP-bound tokens. PAR and the login succeed.

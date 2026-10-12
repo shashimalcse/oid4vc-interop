@@ -7,13 +7,14 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 
 from ..config.schema import WalletConfig
 from ..core.model import HttpExchange
 from . import waltid_config
-from .waltid import Wallet2Client, WalletError
+from .waltid import Wallet2Client, WalletError, find_sd_jwt
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,12 @@ log = logging.getLogger(__name__)
 class Resolved:
     client_id: str | None
     detail: str
+
+
+@dataclass
+class Issuance:
+    authorization_url: str
+    state: dict[str, Any]  # whatever the driver needs to complete it
 
 
 @dataclass
@@ -64,6 +71,22 @@ class WalletDriver(ABC):
 
     @abstractmethod
     def drain(self) -> list[HttpExchange]: ...
+
+    # -- OpenID4VCI, authorization code (wallet-interop) ------------------------------------------
+
+    #: "private_key_jwt" or "public": which issuer client this wallet authenticates as.
+    client_auth = "private_key_jwt"
+
+    def start_issuance(self, wallet_id: str, key_id: str, meta: dict[str, Any], configuration_id: str,
+                       client_id: str, redirect_uri: str) -> Issuance:
+        raise NotImplementedError(f"{self.name} does not implement issuance")
+
+    def complete_issuance(self, wallet_id: str, issuance: Issuance, redirect_url: str) -> list[str]:
+        raise NotImplementedError
+
+    def credential(self, wallet_id: str, credential_id: str) -> str | None:
+        """The raw credential (SD-JWT) the wallet stored."""
+        raise NotImplementedError
 
     def close(self) -> None:
         pass
@@ -109,6 +132,36 @@ class Wallet2Driver(WalletDriver):
     def drain(self) -> list[HttpExchange]:
         return self.client.drain()
 
+    def start_issuance(self, wallet_id, key_id, meta, configuration_id, client_id, redirect_uri):
+        res = self.client.authorization_url(wallet_id, meta["credential_issuer"], [configuration_id], client_id, redirect_uri)
+        state = {"auth": res, "meta": meta, "configuration_id": configuration_id, "client_id": client_id,
+                 "redirect_uri": redirect_uri, "key_id": key_id}
+        return Issuance(res["authorizationUrl"], state)
+
+    def complete_issuance(self, wallet_id, issuance, redirect_url):
+        params = parse_qs(urlparse(redirect_url).query)
+        st, meta = issuance.state, issuance.state["meta"]
+        body = {
+            "code": params["code"][0],
+            "codeVerifier": st["auth"]["codeVerifier"],
+            "credentialIssuer": st["auth"].get("credentialIssuerBaseUrl") or meta["credential_issuer"],
+            "credentialEndpoint": meta["credential_endpoint"],
+            "credentialConfigurationId": st["configuration_id"],
+            "clientId": st["client_id"],
+            "redirectUri": st["redirect_uri"],
+            "keyId": st["key_id"],
+            "useDpop": True,
+        }
+        if meta.get("nonce_endpoint"):
+            body["nonceEndpoint"] = meta["nonce_endpoint"]
+        res = self.client.receive_authorized(wallet_id, body)
+        if not res.get("credentialIds"):
+            raise WalletError(f"Wallet2 stored no credential (deferred: {res.get('deferredTransactionIds')})")
+        return list(res["credentialIds"])
+
+    def credential(self, wallet_id, credential_id):
+        return find_sd_jwt(self.client.get_credential(wallet_id, credential_id))
+
     def close(self) -> None:
         self.client.close()
 
@@ -120,6 +173,7 @@ class EudiDriver(WalletDriver):
         super().__init__(cfg)
         self.http = httpx.Client(base_url=cfg.url, timeout=90)
         self.exchanges: list[HttpExchange] = []
+        self._raw: dict[str, str] = {}
 
     def _call(self, path: str, body: Any) -> Any:
         r = self.http.post(path, json=body)
@@ -168,6 +222,31 @@ class EudiDriver(WalletDriver):
     def drain(self) -> list[HttpExchange]:
         out, self.exchanges = self.exchanges, []
         return out
+
+    client_auth = "public"  # the EUDI OpenID4VCI library supports no private_key_jwt
+
+    def start_issuance(self, wallet_id, key_id, meta, configuration_id, client_id, redirect_uri):
+        res = self._call(f"/wallets/{wallet_id}/issuance/authorize", {
+            "credentialIssuer": meta["credential_issuer"], "credentialConfigurationId": configuration_id,
+            "clientId": client_id, "redirectUri": redirect_uri,
+        })
+        if not res.get("ok"):
+            raise WalletError(f"EUDI wallet could not start issuance: {res.get('error')}")
+        return Issuance(res["authorizationUrl"], {"sessionId": res["sessionId"]})
+
+    def complete_issuance(self, wallet_id, issuance, redirect_url):
+        params = parse_qs(urlparse(redirect_url).query)
+        res = self._call(f"/wallets/{wallet_id}/issuance/complete", {
+            "sessionId": issuance.state["sessionId"], "code": params["code"][0],
+            "state": params.get("state", [""])[0], "iss": params.get("iss", [None])[0],
+        })
+        if not res.get("ok"):
+            raise WalletError(f"EUDI wallet issuance failed: {res.get('error')}")
+        self._raw.update(zip(res["credentialIds"], res["credentials"]))
+        return list(res["credentialIds"])
+
+    def credential(self, wallet_id, credential_id):
+        return self._raw.get(credential_id)
 
     def close(self) -> None:
         self.http.close()

@@ -21,9 +21,11 @@ issuer:                               # needed by vci-base, vci-haip, wallet-int
   clients:                            # up to 2 suite clients (the second enables the multiple-clients module)
     - client_id: suite-client-1
       jwk_file: keys/client1.jwk.json # optional private EC P-256 JWK; generated per run otherwise
-  wallet_client:                      # Wallet2's client (wallet-interop)
+  wallet_client:                      # private_key_jwt client for wallet-interop (Wallet2)
     client_id: wallet
     jwk_file: keys/wallet-client.jwk.json
+  public_client:                      # public client for wallet-interop (the EUDI wallet: no private_key_jwt)
+    client_id: wallet-public
   login:                              # a user for the authorization-code flow
     username: test-user
     password: ...
@@ -32,6 +34,8 @@ issuer:                               # needed by vci-base, vci-haip, wallet-int
       password: ["#pass"]
       submit: ["#login"]
       consent: ["#allow"]
+    headers:                          # optional extra HTTP headers for the login browser,
+      ngrok-skip-browser-warning: "1" #   e.g. to skip a tunnel's interstitial page
   expected_claims: {given_name: Ada}  # wallet-interop asserts these in the issued credential
   credential_trust_anchor: {file: ca.pem}   # vci-haip: what issued credentials chain to
   status_list_trust_anchor: {pem: "..."}    # vci-haip: defaults to credential_trust_anchor
@@ -138,6 +142,8 @@ The **setup** hook's stdin carries everything that has to be registered at the t
 
 What the target has to do with these values:
 - Register `suite.callbacks` and `wallet.redirect_uri` as redirect URIs.
+- For wallet-interop, register two wallet clients with `wallet.redirect_uri`: a `private_key_jwt` client
+  with the `wallet_client` key (Wallet2), and a public client (the EUDI wallet).
 - Register the clients for `private_key_jwt`, using `public_jwk` or `cert_pem`.
 - Make the verifier request `suite_credential` and trust `test_ca_pem`. The suite signs the PID with
   a key whose x5c chains to that CA; the CA itself is not in x5c.

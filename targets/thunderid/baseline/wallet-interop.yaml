@@ -1,3 +1,12 @@
-# Wallet2 issuance from ThunderID, then presentation. Not yet run.
+# Real wallets: issuance from ThunderID, then presentation. Observed 2026-10-12 (ThunderID 1.0.1,
+# walt.id Wallet2 1.1.1, EUDI openid4vci 0.14.1 / openid4vp 0.16.2).
+#
+# With the default configuration both wallets stop at PAR: invalid_target, because the advertised
+# credential scope needs an RFC 8707 resource. With THUNDER_DEFAULT_RESOURCE_SERVER=1 (workaround)
+# both complete issuance (PAR, gate login, DPoP token, proof, credential with cnf and the expected
+# claims) and then stop at presentation.request: the request object has no aud.
 profile: wallet-interop
-cases: {}
+cases:
+  "*/issuance.authorization-url":
+    expect: FAILED
+    reason: "PAR: invalid_target, no resource parameter and no default resource server (credential scope treated as a permission scope)"

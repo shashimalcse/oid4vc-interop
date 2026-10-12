@@ -27,6 +27,7 @@ def main() -> None:
         "credential_configuration_id": UNUSED,
         "clients": [{"client_id": UNUSED}, {"client_id": UNUSED}],
         "wallet_client": {"client_id": UNUSED},
+        "public_client": {"client_id": UNUSED},
         "user": {"username": UNUSED, "password": UNUSED},
         "presentation_definitions": {"suite": UNUSED, "wallet": UNUSED},
         "cleanup": cleanup,
@@ -69,6 +70,10 @@ def main() -> None:
                 cleanup["apps"].append(admin.create_wallet_app(
                     client_id, client_id, [ctx["wallet"]["redirect_uri"]], ctx["wallet_client"]["public_jwk"], [handle]))
                 out["wallet_client"] = {"client_id": client_id}
+                public_id = f"{tag}-public-wallet"
+                cleanup["apps"].append(admin.create_public_wallet_app(
+                    public_id, public_id, [ctx["wallet"]["redirect_uri"]], [handle]))
+                out["public_client"] = {"client_id": public_id}
                 # ThunderID trusts issuers by x5c chain only; its own credentials chain to its
                 # signing certificate, which is not a configured anchor, so issuer trust is off here.
                 cleanup["definitions"].append(admin.create_presentation_definition(

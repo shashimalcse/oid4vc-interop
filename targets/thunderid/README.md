@@ -38,6 +38,14 @@ Presentations start with `POST /openid4vp/initiate`, and the verdict comes from
     - HAIP: the `direct_post` response has no `redirect_uri`.
 - **wallet-vp:** both wallets refuse the request object because it has no `aud`. Wallet2 and the
   EUDI library both expect `https://self-issued.me/v2`; the suite does not check this.
+- **wallet-interop:** both wallets stop at PAR (`invalid_target`, the same scope/resource gap).
+  With `THUNDER_DEFAULT_RESOURCE_SERVER=1` (an opt-in workaround: the hook sets a per-run
+  `defaultResourceServer`, then restores it), both wallets complete issuance, including PAR, the
+  gate login, DPoP, the proof, and a credential with `cnf` and the expected claims. They then stop
+  at presentation on the missing `aud`.
+- **Discoverability:** a per-app PAR requirement isn't visible in the AS metadata, so wallets skip
+  PAR and are refused. This target sets `oauth.par.require_par: true` so that
+  `require_pushed_authorization_requests` is advertised.
 - **vci-base:**
   - PAR fails with `invalid_target`: the advertised credential scope needs a `resource` or a
     server-wide `defaultResourceServer`.

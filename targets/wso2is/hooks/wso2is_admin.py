@@ -103,6 +103,34 @@ class ISAdmin:
         oidc = self._req("GET", f"/api/server/v1/applications/{app_id}/inbound-protocols/oidc").json()
         return {"id": app_id, "client_id": oidc["clientId"]}
 
+    def create_public_app(self, name: str, callbacks: list[str]) -> dict[str, str]:
+        """Public client (no client authentication): PKCE S256, PAR, DPoP-bound JWT tokens."""
+        body = {
+            "name": name,
+            "templateId": "custom-application-oidc",
+            "isManagementApp": False,
+            "advancedConfigurations": {"skipLoginConsent": True, "skipLogoutConsent": True},
+            "inboundProtocolConfiguration": {
+                "oidc": {
+                    "grantTypes": ["authorization_code"],
+                    "callbackURLs": callbacks,
+                    "publicClient": True,
+                    "pkce": {"mandatory": True, "supportPlainTransformAlgorithm": False},
+                    "accessToken": {
+                        "type": "JWT", "bindingType": "DPoP", "validateTokenBinding": True,
+                        "userAccessTokenExpiryInSeconds": 3600, "applicationAccessTokenExpiryInSeconds": 3600,
+                        "revokeTokensWhenIDPSessionTerminated": False,
+                    },
+                    "refreshToken": {"expiryInSeconds": 86400, "renewRefreshToken": True},
+                    "pushAuthorizationRequest": {"requirePushAuthorizationRequest": True},
+                }
+            },
+        }
+        r = self._req("POST", "/api/server/v1/applications", (201,), json=body)
+        app_id = r.headers["Location"].rstrip("/").rsplit("/", 1)[-1]
+        oidc = self._req("GET", f"/api/server/v1/applications/{app_id}/inbound-protocols/oidc").json()
+        return {"id": app_id, "client_id": oidc["clientId"]}
+
     def authorize_api(self, app_id: str, resource_id: str, scope: str) -> None:
         body = {"id": resource_id, "policyIdentifier": "No Policy", "scopes": [scope]}
         self._req("POST", f"/api/server/v1/applications/{app_id}/authorized-apis", (200, 201, 409), json=body)

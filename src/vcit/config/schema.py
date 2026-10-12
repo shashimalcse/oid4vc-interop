@@ -102,6 +102,8 @@ class Login(_Model):
     username: str
     password: str
     selectors: LoginSelectors = LoginSelectors()
+    # Extra HTTP headers the login browser sends, e.g. to skip a tunnel's interstitial page.
+    headers: dict[str, str] = Field(default_factory=dict)
 
 
 class ClientSpec(_Model):
@@ -113,6 +115,12 @@ class ClientSpec(_Model):
 
     client_id: str
     jwk_file: Path | None = None
+
+
+class PublicClientSpec(_Model):
+    """A public OAuth client (no client authentication), for wallets that support only that."""
+
+    client_id: str
 
 
 class Pem(_Model):
@@ -138,7 +146,8 @@ class IssuerConfig(_Model):
     credential_issuer: str
     credential_configuration_id: str
     clients: list[ClientSpec] = Field(default_factory=list, max_length=2)  # suite: client, client2
-    wallet_client: ClientSpec | None = None  # Wallet2's client for wallet-interop
+    wallet_client: ClientSpec | None = None  # private_key_jwt client for wallet-interop (Wallet2)
+    public_client: PublicClientSpec | None = None  # public client for wallet-interop (EUDI wallet)
     login: Login | None = None
     expected_claims: dict[str, Any] = Field(default_factory=dict)
     # Certificates the suite uses to check issued credentials (required by the HAIP plan).

@@ -15,8 +15,10 @@ issuer:
   clients:
     - client_id: "${setup.clients.0.client_id}"
     - client_id: "${setup.clients.1.client_id}"
-  wallet_client:
+  wallet_client:          # private_key_jwt client (Wallet2)
     client_id: "${setup.wallet_client.client_id}"
+  public_client:          # public client (the EUDI wallet supports no private_key_jwt)
+    client_id: "${setup.public_client.client_id}"
   login:
     username: "${setup.user.username}"
     password: "${setup.user.password}"
