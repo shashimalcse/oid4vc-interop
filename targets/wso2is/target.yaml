@@ -76,6 +76,7 @@ profiles:
   - vci-haip
   - vp-base
   - vp-haip
+  - wallet-vp
   - wallet-interop
 
 suite:

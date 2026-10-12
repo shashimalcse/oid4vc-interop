@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from ..config.schema import NEEDS_ISSUER
+from ..config.schema import NEEDS_ISSUER, WALLET_PROFILES
 from ..core.context import RunContext
 from ..profiles import profile_class
 from ..profiles.base import SuiteProfile
@@ -51,7 +51,7 @@ def preflight(ctx: RunContext) -> dict[str, Any]:
         if missing:
             raise PreflightError(f"conformance suite does not offer: {', '.join(missing)}")
 
-    if "wallet-interop" in ids:
+    if ids & WALLET_PROFILES:
         try:
             httpx.get(f"{t.wallet.url}/api.json", timeout=10).raise_for_status()
         except httpx.HTTPError as e:

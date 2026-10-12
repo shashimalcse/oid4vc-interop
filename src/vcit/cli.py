@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import ConfigError, LoadedTarget, TargetProfile, load_target, redact
+from .config.schema import WALLET_PROFILES
 from .constants import PID_CLAIMS, PID_VCT, WALLET_REDIRECT_URI
 from .core.context import RunContext, new_run_id
 from .core.expectations import apply_expectations, load_expectations, should_fail
@@ -143,7 +144,7 @@ def _compose(args: argparse.Namespace, t: TargetProfile, *extra: str) -> int:
     cmd = ["docker", "compose", "-f", str(args.compose), "-p", "vcit"]
     if t.suite.mode == "managed":
         cmd += ["--profile", "suite"]
-    if t.wallet.mode == "managed" and any(p.id == "wallet-interop" for p in t.profiles):
+    if t.wallet.mode == "managed" and any(p.id in WALLET_PROFILES for p in t.profiles):
         cmd += ["--profile", "wallet"]
     cmd += list(extra)
     log.info("$ %s", " ".join(cmd))
@@ -152,7 +153,12 @@ def _compose(args: argparse.Namespace, t: TargetProfile, *extra: str) -> int:
 
 def cmd_up(args: argparse.Namespace) -> int:
     loaded = _load(args)
-    rc = _compose(args, loaded.model, "up", "-d", "--wait")
+    t = loaded.model
+    if t.wallet.mode == "managed" and any(p.id in WALLET_PROFILES for p in t.profiles):
+        from .wallets.waltid_config import ensure_default
+
+        ensure_default(t.wallet.image)
+    rc = _compose(args, t, "up", "-d", "--wait")
     if rc == 0 and loaded.model.suite.mode == "managed":
         RunContext(loaded, "up", Path(".")).suite.wait_until_ready()
         print(f"suite ready at {loaded.model.suite.url}")

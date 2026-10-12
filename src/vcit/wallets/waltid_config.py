@@ -52,12 +52,31 @@ def render(trust_anchors: list[str], tls_certs: list[str], wallet_image: str) ->
 
     store = trust / "truststore.p12"
     store.unlink(missing_ok=True)
+    if not tls_certs:
+        # The JVM needs a readable truststore file; a placeholder keeps TLS to public CAs failing
+        # loudly rather than silently, so collect the target's certificates whenever possible.
+        log.warning("no TLS certificate collected; Wallet2 trusts only a placeholder certificate")
+        tls_certs = [_placeholder_cert()]
     for i, pem in enumerate(tls_certs):
         (trust / f"tls-{i}.pem").write_text(pem)
-        _keytool(trust, f"tls-{i}.pem", f"is-tls-{i}", wallet_image)
-    if not tls_certs:
-        log.warning("no TLS certificate collected; Wallet2 will only trust the JDK defaults")
+        _keytool(trust, f"tls-{i}.pem", f"target-tls-{i}", wallet_image)
     return base
+
+
+def ensure_default(wallet_image: str) -> None:
+    """Before the first start: a valid config and truststore, so the container can boot."""
+    base = state_dir() / "wallet2"
+    if not (base / "config" / "wallet-service.conf").exists() or not (base / "trust" / "truststore.p12").exists():
+        render([], [], wallet_image)
+
+
+def _placeholder_cert() -> str:
+    import tempfile
+
+    from ..core.pki import RunPki
+
+    with tempfile.TemporaryDirectory() as tmp:
+        return RunPki.create(Path(tmp), "vcit placeholder").ca_pem
 
 
 def _keytool(trust: Path, pem_name: str, alias: str, wallet_image: str) -> None:

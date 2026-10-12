@@ -76,7 +76,7 @@ def main() -> None:
                 out["presentation_definitions"]["wallet"] = f"{tag}-wallet"
                 log(f"presentation definition {tag}-wallet")
 
-        if profiles & {"vp-base", "vp-haip"}:
+        if profiles & {"vp-base", "vp-haip", "wallet-vp"}:
             pid = ctx["suite_credential"]
             pd = admin.create_presentation_definition(f"{tag}-suite", pid["vct"], pid["claims"])
             cleanup["definitions"].append(pd["id"])

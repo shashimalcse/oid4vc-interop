@@ -74,3 +74,32 @@ def test_wallet_redaction():
 def test_b64_pem_for_issuer_config():
     pem = "-----BEGIN CERTIFICATE-----\nAAA\n-----END CERTIFICATE-----\n"
     assert base64.b64decode(base64.b64encode(pem.encode())).decode() == pem
+
+
+def test_issued_sd_jwt_vc_round_trip(tmp_path):
+    import hashlib
+
+    from vcit.core.pki import RunPki, decode_jwt, load_cert
+    from vcit.core.sdjwt import issue_sd_jwt_vc
+
+    pki = RunPki.create(tmp_path, "ca")
+    signer = pki.issue("signer", "signer")
+    holder = pki.self_signed("holder", "holder")
+    sd_jwt = issue_sd_jwt_vc(signer, holder.public_jwk(), "urn:eudi:pid:1", {"given_name": "Erika"}, "https://iss")
+    payload, claims = disclosed_claims(sd_jwt)
+    assert claims == {"given_name": "Erika"} and payload["_sd_alg"] == "sha-256"
+    assert payload["cnf"]["jwk"]["x"] == holder.public_jwk()["x"] and "d" not in payload["cnf"]["jwk"]
+    disclosure = sd_jwt.split("~")[1]
+    assert b64url(hashlib.sha256(disclosure.encode()).digest()) in payload["_sd"]
+    header, _ = decode_jwt(sd_jwt.split("~")[0])
+    assert header["typ"] == "dc+sd-jwt" and load_cert(header["x5c"][0]) == signer.cert
+    # signature verifies with the signer's public key
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+    from vcit.core.pki import b64url_decode
+
+    h, p, sig = sd_jwt.split("~")[0].split(".")
+    raw = b64url_decode(sig)
+    der = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
+    signer.cert.public_key().verify(der, f"{h}.{p}".encode(), ec.ECDSA(hashes.SHA256()))

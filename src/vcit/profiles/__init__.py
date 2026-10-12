@@ -11,6 +11,7 @@ _REGISTRY = {
     "vci-haip": "vcit.profiles.vci:VciHaipProfile",
     "vp-base": "vcit.profiles.vp:VpBaseProfile",
     "vp-haip": "vcit.profiles.vp:VpHaipProfile",
+    "wallet-vp": "vcit.profiles.wallet_interop:WalletVpProfile",
     "wallet-interop": "vcit.profiles.wallet_interop:WalletInteropProfile",
 }
 

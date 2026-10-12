@@ -54,6 +54,7 @@ class Verifier:
         if ctx.target.verifier is None:
             raise VerifierError("the target profile has no verifier section")
         self._probe: tuple[x509.Certificate, list[x509.Certificate]] | None = None
+        self.probe_presentation: Presentation | None = None
 
     @property
     def cfg(self) -> VerifierConfig:
@@ -143,7 +144,8 @@ class Verifier:
     def request_certificate(self, kind: str) -> tuple[x509.Certificate, list[x509.Certificate]]:
         """Start one throwaway presentation and read the x5c of the signed request."""
         if self._probe is None:
-            header, _ = decode_jwt(self.request_object(self.start(kind)))
+            self.probe_presentation = self.start(kind)
+            header, _ = decode_jwt(self.request_object(self.probe_presentation))
             chain = [load_cert(c) for c in header.get("x5c") or []]
             if not chain:
                 raise VerifierError("the verifier's request object has no x5c header")

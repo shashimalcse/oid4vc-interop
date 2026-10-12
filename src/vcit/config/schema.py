@@ -12,8 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-PROFILE_IDS = ("vci-base", "vci-haip", "vp-base", "vp-haip", "wallet-interop")
-ProfileId = Literal["vci-base", "vci-haip", "vp-base", "vp-haip", "wallet-interop"]
+PROFILE_IDS = ("vci-base", "vci-haip", "vp-base", "vp-haip", "wallet-vp", "wallet-interop")
+ProfileId = Literal["vci-base", "vci-haip", "vp-base", "vp-haip", "wallet-vp", "wallet-interop"]
 
 class ConfigError(ValueError):
     pass
@@ -150,8 +150,9 @@ class IssuerConfig(_Model):
 
 
 class VerifierConfig(_Model):
-    # `suite`: request for the PID the conformance suite presents; `wallet`: request for the
-    # issuer's credential that Wallet2 holds after wallet-interop issuance.
+    # `suite`: request for the test PID (presented by the conformance suite in vp-*, and by
+    # Wallet2 in wallet-vp); `wallet`: request for the issuer's credential that Wallet2 holds
+    # after wallet-interop issuance.
     start_presentation: dict[Literal["suite", "wallet"], PresentationTrigger]
     result: ResultPoll | None = None
     # CA of the certificate the verifier signs requests with; derived from x5c when omitted.
@@ -222,7 +223,8 @@ class ReportConfig(_Model):
 
 
 NEEDS_ISSUER = {"vci-base", "vci-haip", "wallet-interop"}
-NEEDS_VERIFIER = {"vp-base", "vp-haip", "wallet-interop"}
+NEEDS_VERIFIER = {"vp-base", "vp-haip", "wallet-vp", "wallet-interop"}
+WALLET_PROFILES = {"wallet-vp", "wallet-interop"}
 
 
 class TargetProfile(_Model):
@@ -261,7 +263,7 @@ class TargetProfile(_Model):
         if set(ids) & NEEDS_VERIFIER and self.verifier is None:
             raise ValueError(f"profiles {sorted(set(ids) & NEEDS_VERIFIER)} need a verifier section")
         if self.verifier:
-            want = {"suite"} if set(ids) & {"vp-base", "vp-haip"} else set()
+            want = {"suite"} if set(ids) & {"vp-base", "vp-haip", "wallet-vp"} else set()
             if "wallet-interop" in ids:
                 want.add("wallet")
             missing = want - set(self.verifier.start_presentation)

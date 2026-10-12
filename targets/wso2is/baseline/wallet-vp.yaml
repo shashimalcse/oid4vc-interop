@@ -1,0 +1,9 @@
+# Wallet2 presenting the vcit test PID to the IS verifier. Observed 2026-10-12 (Wallet2 1.1.1,
+# IS 7.4.0-SNAPSHOT / identity-openid4vc 1.1.16).
+profile: wallet-vp
+cases:
+  presentation.request:
+    expect: FAILED
+    reason: >-
+      IS GET /oid4vp/requests/{id} answers 406: the JAX-RS endpoint is @Produces("application/oauth-authz-req+jwt")
+      and Wallet2 sends Accept: application/json. IS should serve the request object regardless of Accept.

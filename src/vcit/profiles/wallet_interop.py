@@ -1,9 +1,13 @@
-"""Real-wallet interop: walt.id Wallet2 against the target, issuance then presentation.
+"""Real-wallet profiles with walt.id Wallet2.
 
-Wallet2 gets a credential from the issuer with the authorization-code flow, then presents it
-to the verifier (the target's `start_presentation.wallet` trigger). Each step is its own case
-in the report; a step that cannot run because an earlier one failed is SKIPPED, so the first
-failure is the one that counts.
+- wallet-vp: verifier only. vcit issues Wallet2 a test PID (signed by the run's test CA, the
+  same trust the suite's verifier tests use) and Wallet2 presents it to the verifier
+  (`start_presentation.suite`).
+- wallet-interop: issuer and verifier. Wallet2 gets a credential from the issuer with the
+  authorization-code flow, then presents it (`start_presentation.wallet`).
+
+Each step is its own case in the report; a step that cannot run because an earlier one failed
+is SKIPPED, so the first failure is the one that counts.
 """
 
 from __future__ import annotations
@@ -15,9 +19,10 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from ..browser.login import LoginError
-from ..constants import WALLET_REDIRECT_URI
+from ..constants import PID_ISSUER, PID_SAMPLE, PID_VCT, WALLET_REDIRECT_URI
 from ..core.model import Case, ProfileResult, Step
 from ..core.pki import b64url_decode, decode_jwt
+from ..core.sdjwt import issue_sd_jwt_vc
 from ..target.issuer import IssuerError
 from ..target.verifier import VerifierError
 from ..wallets import waltid_config
@@ -45,52 +50,46 @@ def disclosed_claims(sd_jwt: str) -> tuple[dict[str, Any], dict[str, Any]]:
     return payload, claims
 
 
-class WalletInteropProfile(Profile):
-    id = "wallet-interop"
-    title = "Wallet interop (walt.id Wallet2)"
+class _WalletProfile(Profile):
     kind = "wallet"
+    trigger: str  # which verifier.start_presentation entry this profile uses
 
-    def provision(self) -> None:
-        self.ctx.issuer.login()
-        self.ctx.issuer.wallet_client()
-        self._configure_wallet_trust()
+    def checks(self) -> list[tuple[str, Callable[[Case], None]]]:
+        raise NotImplementedError
+
+    def expected_claims(self) -> dict[str, Any]:
+        raise NotImplementedError
 
     def _configure_wallet_trust(self) -> None:
+        """Wallet2 reads trust anchors only at startup: render its config, then restart it."""
         w = self.ctx.target.wallet
-        anchor = self.ctx.verifier.trust_anchor_pem("wallet", required=True)
+        verifier = self.ctx.verifier
+        anchor = verifier.trust_anchor_pem(self.trigger, required=True)
         if w.mode != "managed":
             log.warning("wallet.mode is external: make sure Wallet2 trusts the verifier's request certificate and TLS")
             return
-        hosts = {self.ctx.issuer.credential_issuer}
-        try:
-            _, chain = self.ctx.verifier.request_certificate("wallet")
-        except VerifierError:
-            chain = []
+        urls = set()
+        probe = verifier.probe_presentation
+        if probe and probe.param("request_uri"):
+            urls.add(probe.param("request_uri"))
+        if self.ctx.target.issuer and self.id == "wallet-interop":
+            urls.add(self.ctx.issuer.credential_issuer)
         tls = []
-        for url in hosts:
+        for url in urls:
             try:
                 tls.append(waltid_config.server_certificate(url))
             except (OSError, ValueError) as e:
                 log.info("could not read the TLS certificate of %s: %s", url, e)
         waltid_config.render([anchor] if anchor else [], sorted(set(tls)), w.image)
         waltid_config.restart_managed(w.url)
-        log.info("Wallet2 restarted trusting the verifier's request certificate (%d in chain)", len(chain))
+        log.info("Wallet2 restarted, trusting the verifier's request certificate")
 
     # -- run ------------------------------------------------------------------------------
 
     def run(self) -> ProfileResult:
         result = self.new_result()
         self.state: dict[str, Any] = {}
-        checks: list[tuple[str, Callable[[Case], None]]] = [
-            ("wallet.setup", self._setup),
-            ("issuance.authorization-url", self._authorization_url),
-            ("issuance.login", self._login),
-            ("issuance.credential", self._credential),
-            ("issuance.stored-credential", self._stored),
-            ("presentation.request", self._request),
-            ("presentation.submit", self._submit),
-            ("presentation.verified", self._verified),
-        ]
+        checks = self.checks()
         # Steps depend on every step before them: with a module filter, run up to the last match.
         wanted = [i for i, (cid, _) in enumerate(checks) if self.ctx.target.modules.matches(cid)]
         checks = checks[: max(wanted) + 1] if wanted else []
@@ -122,6 +121,95 @@ class WalletInteropProfile(Profile):
         exchanges = self.ctx.wallet.drain()
         if exchanges:
             case.steps.append(Step("Wallet2 API calls", case.status, http=exchanges))
+
+    def _request(self, case: Case) -> None:
+        p = self.ctx.verifier.start(self.trigger)
+        self.state["presentation"] = p
+        resolved = self.ctx.wallet.resolve_request(self.state["wallet_id"], p.wallet_url)
+        case.steps.append(Step("Wallet2 resolved and authenticated the verifier's request", "PASSED",
+                               f"client_id {resolved.get('clientId')}", http=p.exchanges))
+
+    def _submit(self, case: Case) -> None:
+        res = self.ctx.wallet.present(self.state["wallet_id"], self.state["presentation"].wallet_url)
+        if not res.get("transmission_success"):
+            raise Blocked(f"Wallet2 could not deliver the presentation: {json.dumps(res)[:800]}")
+        case.steps.append(Step("presentation delivered", "PASSED", json.dumps(res.get("verifier_response"))[:800]))
+
+    def _verified(self, case: Case) -> None:
+        verdict = self.ctx.verifier.wait_result(self.state["presentation"].session)
+        if verdict.ok is None:
+            case.status = "SKIPPED"
+            case.error = "the target profile defines no verifier.result poll"
+            return
+        if not verdict.ok:
+            raise ValueError(f"verifier concluded {verdict.status}: {json.dumps(verdict.body)[:500]}")
+        text = verdict.details or json.dumps(verdict.body)
+        missing = [k for k, v in self.expected_claims().items() if json.dumps(v) not in text]
+        case.steps.append(Step("verifier result", "FAILED" if missing else "PASSED", text[:4000]))
+        if missing:
+            raise ValueError(f"the verifier's result lacks the value(s) of {', '.join(missing)}")
+
+
+class WalletVpProfile(_WalletProfile):
+    id = "wallet-vp"
+    title = "Wallet presentation (walt.id Wallet2 to verifier)"
+    trigger = "suite"
+
+    def provision(self) -> None:
+        self._configure_wallet_trust()
+
+    def expected_claims(self) -> dict[str, Any]:
+        return PID_SAMPLE
+
+    def checks(self) -> list[tuple[str, Callable[[Case], None]]]:
+        return [
+            ("wallet.setup", self._setup),
+            ("credential.import", self._import),
+            ("presentation.request", self._request),
+            ("presentation.submit", self._submit),
+            ("presentation.verified", self._verified),
+        ]
+
+    def _setup(self, case: Case) -> None:
+        w = self.ctx.wallet
+        self.holder = self.ctx.keys.pki.self_signed("wallet-holder", "vcit Wallet2 holder")
+        self.state["wallet_id"] = w.create_wallet()
+        self.state["key_id"] = w.import_jwk(self.state["wallet_id"], self.holder.private_jwk())
+        case.steps.append(Step("wallet created; holder key imported", "PASSED", f"keyId {self.state['key_id']}"))
+
+    def _import(self, case: Case) -> None:
+        signer = self.ctx.keys.suite_signer
+        sd_jwt = issue_sd_jwt_vc(signer, self.holder.public_jwk(), PID_VCT, PID_SAMPLE, PID_ISSUER)
+        stored = self.ctx.wallet.import_credential(self.state["wallet_id"], sd_jwt, label="vcit test PID")
+        self.state["credential_id"] = stored.get("id")
+        case.steps.append(Step("test PID issued (test-CA chain) and imported", "PASSED",
+                               json.dumps({"vct": PID_VCT, "claims": PID_SAMPLE, "iss": PID_ISSUER})))
+
+
+class WalletInteropProfile(_WalletProfile):
+    id = "wallet-interop"
+    title = "Wallet interop (walt.id Wallet2, issuer to verifier)"
+    trigger = "wallet"
+
+    def provision(self) -> None:
+        self.ctx.issuer.login()
+        self.ctx.issuer.wallet_client()
+        self._configure_wallet_trust()
+
+    def expected_claims(self) -> dict[str, Any]:
+        return self.ctx.target.issuer.expected_claims
+
+    def checks(self) -> list[tuple[str, Callable[[Case], None]]]:
+        return [
+            ("wallet.setup", self._setup),
+            ("issuance.authorization-url", self._authorization_url),
+            ("issuance.login", self._login),
+            ("issuance.credential", self._credential),
+            ("issuance.stored-credential", self._stored),
+            ("presentation.request", self._request),
+            ("presentation.submit", self._submit),
+            ("presentation.verified", self._verified),
+        ]
 
     def _setup(self, case: Case) -> None:
         w = self.ctx.wallet
@@ -206,29 +294,3 @@ class WalletInteropProfile(Profile):
         if problems:
             raise ValueError("; ".join(problems))
 
-    def _request(self, case: Case) -> None:
-        p = self.ctx.verifier.start("wallet")
-        self.state["presentation"] = p
-        resolved = self.ctx.wallet.resolve_request(self.state["wallet_id"], p.wallet_url)
-        case.steps.append(Step("Wallet2 resolved and authenticated the verifier's request", "PASSED",
-                               f"client_id {resolved.get('clientId')}", http=p.exchanges))
-
-    def _submit(self, case: Case) -> None:
-        res = self.ctx.wallet.present(self.state["wallet_id"], self.state["presentation"].wallet_url)
-        if not res.get("transmission_success"):
-            raise Blocked(f"Wallet2 could not deliver the presentation: {json.dumps(res)[:800]}")
-        case.steps.append(Step("presentation delivered", "PASSED", json.dumps(res.get("verifier_response"))[:800]))
-
-    def _verified(self, case: Case) -> None:
-        verdict = self.ctx.verifier.wait_result(self.state["presentation"].session)
-        if verdict.ok is None:
-            case.status = "SKIPPED"
-            case.error = "the target profile defines no verifier.result poll"
-            return
-        if not verdict.ok:
-            raise ValueError(f"verifier concluded {verdict.status}: {json.dumps(verdict.body)[:500]}")
-        text = verdict.details or json.dumps(verdict.body)
-        missing = [k for k, v in self.ctx.target.issuer.expected_claims.items() if json.dumps(v) not in text]
-        case.steps.append(Step("verifier result", "FAILED" if missing else "PASSED", text[:4000]))
-        if missing:
-            raise ValueError(f"the verifier's result lacks the value(s) of {', '.join(missing)}")

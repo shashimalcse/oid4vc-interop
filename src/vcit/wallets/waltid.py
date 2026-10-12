@@ -114,6 +114,10 @@ class Wallet2Client:
     def receive_authorized(self, wallet_id: str, body: dict[str, Any]) -> dict[str, Any]:
         return self._call("POST", f"/wallet/{wallet_id}/credentials/receive/authorized", body)
 
+    def import_credential(self, wallet_id: str, raw: str, label: str | None = None) -> dict[str, Any]:
+        """Store a raw credential; Wallet2 binds it to the wallet key matching its cnf."""
+        return self._call("POST", f"/wallet/{wallet_id}/credentials/import", {"rawCredential": raw, "label": label})
+
     def list_credentials(self, wallet_id: str) -> list[dict[str, Any]]:
         return self._call("GET", f"/wallet/{wallet_id}/credentials")
 
