@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -52,10 +53,16 @@ def preflight(ctx: RunContext) -> dict[str, Any]:
             raise PreflightError(f"conformance suite does not offer: {', '.join(missing)}")
 
     if ids & WALLET_PROFILES:
-        try:
-            httpx.get(f"{t.wallet.url}/api.json", timeout=10).raise_for_status()
-        except httpx.HTTPError as e:
-            raise PreflightError(f"Wallet2 not reachable at {t.wallet.url}: {e}") from e
+        for driver in ctx.wallets:
+            deadline = time.monotonic() + 30  # a freshly started JVM wallet takes a few seconds
+            while True:
+                try:
+                    driver.health()
+                    break
+                except httpx.HTTPError as e:
+                    if time.monotonic() > deadline:
+                        raise PreflightError(f"wallet {driver.name} not reachable at {driver.cfg.url}: {e}") from e
+                    time.sleep(2)
 
     log.info("preflight OK")
     return facts

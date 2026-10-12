@@ -26,6 +26,7 @@ from ..core.sdjwt import issue_sd_jwt_vc
 from ..target.issuer import IssuerError
 from ..target.verifier import VerifierError
 from ..wallets import waltid_config
+from ..wallets.driver import Wallet2Driver, WalletDriver
 from ..wallets.waltid import WalletError, find_sd_jwt
 from .base import Profile
 
@@ -60,14 +61,13 @@ class _WalletProfile(Profile):
     def expected_claims(self) -> dict[str, Any]:
         raise NotImplementedError
 
+    def drivers(self) -> list[WalletDriver]:
+        return self.ctx.wallets
+
     def _configure_wallet_trust(self) -> None:
-        """Wallet2 reads trust anchors only at startup: render its config, then restart it."""
-        w = self.ctx.target.wallet
+        """Make every wallet this profile runs trust the verifier's request certificate."""
         verifier = self.ctx.verifier
         anchor = verifier.trust_anchor_pem(self.trigger, required=True)
-        if w.mode != "managed":
-            log.warning("wallet.mode is external: make sure Wallet2 trusts the verifier's request certificate and TLS")
-            return
         urls = set()
         probe = verifier.probe_presentation
         if probe and probe.param("request_uri"):
@@ -80,16 +80,23 @@ class _WalletProfile(Profile):
                 tls.append(waltid_config.server_certificate(url))
             except (OSError, ValueError) as e:
                 log.info("could not read the TLS certificate of %s: %s", url, e)
-        waltid_config.render([anchor] if anchor else [], sorted(set(tls)), w.image)
-        waltid_config.restart_managed(w.url)
-        log.info("Wallet2 restarted, trusting the verifier's request certificate")
+        for driver in self.drivers():
+            driver.configure_trust([anchor] if anchor else [], sorted(set(tls)))
+            log.info("%s trusts the verifier's request certificate", driver.name)
 
     # -- run ------------------------------------------------------------------------------
 
     def run(self) -> ProfileResult:
         result = self.new_result()
-        self.state: dict[str, Any] = {}
-        checks = self.checks()
+        for driver in self.drivers():
+            self.driver = driver
+            self.state: dict[str, Any] = {}
+            result.cases += self._run_checks(f"{driver.name}/")
+        return result
+
+    def _run_checks(self, prefix: str) -> list[Case]:
+        cases: list[Case] = []
+        checks = [(prefix + cid, fn) for cid, fn in self.checks()]
         # Steps depend on every step before them: with a module filter, run up to the last match.
         wanted = [i for i, (cid, _) in enumerate(checks) if self.ctx.target.modules.matches(cid)]
         checks = checks[: max(wanted) + 1] if wanted else []
@@ -113,27 +120,29 @@ class _WalletProfile(Profile):
                 finally:
                     self._flush_http(case)
             case.duration_s = round(time.monotonic() - started, 1)
-            result.cases.append(case)
+            cases.append(case)
             log.info("%s %s -> %s", self.id, case_id, case.status)
-        return result
+        return cases
 
     def _flush_http(self, case: Case) -> None:
-        exchanges = self.ctx.wallet.drain()
+        exchanges = self.driver.drain()
         if exchanges:
-            case.steps.append(Step("Wallet2 API calls", case.status, http=exchanges))
+            case.steps.append(Step(f"{self.driver.name} calls", case.status, http=exchanges))
 
     def _request(self, case: Case) -> None:
         p = self.ctx.verifier.start(self.trigger)
         self.state["presentation"] = p
-        resolved = self.ctx.wallet.resolve_request(self.state["wallet_id"], p.wallet_url)
-        case.steps.append(Step("Wallet2 resolved and authenticated the verifier's request", "PASSED",
-                               f"client_id {resolved.get('clientId')}", http=p.exchanges))
+        resolved = self.driver.resolve_request(self.state["wallet_id"], p.wallet_url)
+        case.steps.append(Step("wallet resolved and authenticated the verifier's request", "PASSED",
+                               resolved.detail, http=p.exchanges))
 
     def _submit(self, case: Case) -> None:
-        res = self.ctx.wallet.present(self.state["wallet_id"], self.state["presentation"].wallet_url)
-        if not res.get("transmission_success"):
-            raise Blocked(f"Wallet2 could not deliver the presentation: {json.dumps(res)[:800]}")
-        case.steps.append(Step("presentation delivered", "PASSED", json.dumps(res.get("verifier_response"))[:800]))
+        res = self.driver.present(self.state["wallet_id"], self.state["presentation"].wallet_url)
+        if not res.ok:
+            raise Blocked(f"presentation not accepted: {res.detail}; verifier said HTTP {res.verifier_status}: "
+                          f"{(res.verifier_body or '')[:400]}")
+        case.steps.append(Step("presentation delivered", "PASSED",
+                               f"verifier HTTP {res.verifier_status}: {(res.verifier_body or '')[:600]}"))
 
     def _verified(self, case: Case) -> None:
         verdict = self.ctx.verifier.wait_result(self.state["presentation"].session)
@@ -152,7 +161,7 @@ class _WalletProfile(Profile):
 
 class WalletVpProfile(_WalletProfile):
     id = "wallet-vp"
-    title = "Wallet presentation (walt.id Wallet2 to verifier)"
+    title = "Wallet presentation (real wallets to verifier)"
     trigger = "suite"
 
     def provision(self) -> None:
@@ -171,17 +180,16 @@ class WalletVpProfile(_WalletProfile):
         ]
 
     def _setup(self, case: Case) -> None:
-        w = self.ctx.wallet
-        self.holder = self.ctx.keys.pki.self_signed("wallet-holder", "vcit Wallet2 holder")
-        self.state["wallet_id"] = w.create_wallet()
-        self.state["key_id"] = w.import_jwk(self.state["wallet_id"], self.holder.private_jwk())
+        d = self.driver
+        self.holder = self.ctx.keys.pki.self_signed("wallet-holder", "vcit wallet holder")
+        self.state["wallet_id"] = d.create_wallet()
+        self.state["key_id"] = d.import_key(self.state["wallet_id"], self.holder.private_jwk())
         case.steps.append(Step("wallet created; holder key imported", "PASSED", f"keyId {self.state['key_id']}"))
 
     def _import(self, case: Case) -> None:
         signer = self.ctx.keys.suite_signer
         sd_jwt = issue_sd_jwt_vc(signer, self.holder.public_jwk(), PID_VCT, PID_SAMPLE, PID_ISSUER)
-        stored = self.ctx.wallet.import_credential(self.state["wallet_id"], sd_jwt, label="vcit test PID")
-        self.state["credential_id"] = stored.get("id")
+        self.state["credential_id"] = self.driver.import_credential(self.state["wallet_id"], sd_jwt)
         case.steps.append(Step("test PID issued (test-CA chain) and imported", "PASSED",
                                json.dumps({"vct": PID_VCT, "claims": PID_SAMPLE, "iss": PID_ISSUER})))
 
@@ -190,6 +198,10 @@ class WalletInteropProfile(_WalletProfile):
     id = "wallet-interop"
     title = "Wallet interop (walt.id Wallet2, issuer to verifier)"
     trigger = "wallet"
+
+    def drivers(self) -> list[WalletDriver]:
+        # Issuance is implemented for Wallet2 only so far.
+        return [d for d in self.ctx.wallets if isinstance(d, Wallet2Driver)]
 
     def provision(self) -> None:
         self.ctx.issuer.login()
@@ -212,7 +224,7 @@ class WalletInteropProfile(_WalletProfile):
         ]
 
     def _setup(self, case: Case) -> None:
-        w = self.ctx.wallet
+        w = self.driver.client
         _, key = self.ctx.issuer.wallet_client()
         self.state["wallet_id"] = w.create_wallet()
         self.state["key_id"] = w.import_jwk(self.state["wallet_id"], key.private_jwk())
@@ -220,7 +232,7 @@ class WalletInteropProfile(_WalletProfile):
 
     def _authorization_url(self, case: Case) -> None:
         client_id, _ = self.ctx.issuer.wallet_client()
-        res = self.ctx.wallet.authorization_url(
+        res = self.driver.client.authorization_url(
             self.state["wallet_id"],
             self.ctx.issuer.credential_issuer,
             [self.ctx.target.issuer.credential_configuration_id],
@@ -267,14 +279,14 @@ class WalletInteropProfile(_WalletProfile):
         }
         if meta.get("nonce_endpoint"):
             body["nonceEndpoint"] = meta["nonce_endpoint"]
-        res = self.ctx.wallet.receive_authorized(self.state["wallet_id"], body)
+        res = self.driver.client.receive_authorized(self.state["wallet_id"], body)
         ids = res.get("credentialIds") or []
         if not ids:
             raise Blocked(f"Wallet2 stored no credential (deferred: {res.get('deferredTransactionIds')})")
         self.state["credential_id"] = ids[0]
 
     def _stored(self, case: Case) -> None:
-        stored = self.ctx.wallet.get_credential(self.state["wallet_id"], self.state["credential_id"])
+        stored = self.driver.client.get_credential(self.state["wallet_id"], self.state["credential_id"])
         sd_jwt = find_sd_jwt(stored)
         if not sd_jwt:
             raise Blocked("stored credential is not an SD-JWT")

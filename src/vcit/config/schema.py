@@ -190,11 +190,28 @@ class SuiteConfig(_Model):
         return v.rstrip("/")
 
 
+WALLET_DEFAULTS = {
+    "waltid-wallet2": {"url": "http://localhost:7006", "image": "waltid/wallet-api2:1.1.1"},
+    "eudi": {"url": "http://localhost:7007", "image": "vcit/eudi-wallet:dev"},  # built from wallets/eudi
+}
+
+
 class WalletConfig(_Model):
-    type: Literal["waltid-wallet2"] = "waltid-wallet2"
+    """A wallet vcit drives in the wallet-* profiles."""
+
+    type: Literal["waltid-wallet2", "eudi"] = "waltid-wallet2"
     mode: Literal["external", "managed"] = "managed"
     url: str = "http://localhost:7006"
     image: str = "waltid/wallet-api2:1.1.1"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _defaults_for_type(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = {"type": v}
+        if isinstance(v, dict):
+            return {**WALLET_DEFAULTS.get(v.get("type", "waltid-wallet2"), {}), **v}
+        return v
 
     @field_validator("url")
     @classmethod
@@ -239,7 +256,7 @@ class TargetProfile(_Model):
     profiles: list[ProfileSelection]
     modules: ModuleFilter = ModuleFilter()
     suite: SuiteConfig = SuiteConfig()
-    wallet: WalletConfig = WalletConfig()
+    wallets: list[WalletConfig] = Field(default_factory=lambda: [WalletConfig()], min_length=1)
     report: ReportConfig = ReportConfig()
 
     # Set by the loader, not by the file.
@@ -254,6 +271,9 @@ class TargetProfile(_Model):
 
     @model_validator(mode="after")
     def _consistent(self) -> "TargetProfile":
+        types = [w.type for w in self.wallets]
+        if len(set(types)) != len(types):
+            raise ValueError("each wallet type may be listed once")
         ids = [p.id for p in self.profiles]
         dupes = sorted({i for i in ids if ids.count(i) > 1})
         if dupes:

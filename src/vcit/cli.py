@@ -66,7 +66,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
               f"{'; result poll' if t.verifier.result else ''}")
     hooks = [n for n in ("setup", "teardown") if getattr(t.hooks, n)]
     print(f"hooks    {', '.join(hooks) or 'none (static target)'}")
-    print(f"suite    {t.suite.url} ({t.suite.mode})   wallet {t.wallet.url} ({t.wallet.mode})")
+    print(f"suite    {t.suite.url} ({t.suite.mode})")
+    for w in t.wallets:
+        print(f"wallet   {w.type:<15} {w.url} ({w.mode})")
     for sel in t.profiles:
         cls = profile_class(sel.id)
         if issubclass(cls, SuiteProfile):
@@ -140,12 +142,20 @@ def cmd_keygen(args: argparse.Namespace) -> int:
 
 
 def _compose(args: argparse.Namespace, t: TargetProfile, *extra: str) -> int:
-    env = {**os.environ, "SUITE_IMAGE_TAG": t.suite.image_tag, "WALLET2_IMAGE": t.wallet.image}
+    env = {**os.environ, "SUITE_IMAGE_TAG": t.suite.image_tag}
     cmd = ["docker", "compose", "-f", str(args.compose), "-p", "vcit"]
     if t.suite.mode == "managed":
         cmd += ["--profile", "suite"]
-    if t.wallet.mode == "managed" and any(p.id in WALLET_PROFILES for p in t.profiles):
-        cmd += ["--profile", "wallet"]
+    if any(p.id in WALLET_PROFILES for p in t.profiles):
+        for w in t.wallets:
+            if w.mode != "managed":
+                continue
+            if w.type == "waltid-wallet2":
+                env["WALLET2_IMAGE"] = w.image
+                cmd += ["--profile", "wallet"]
+            elif w.type == "eudi":
+                env["EUDI_WALLET_IMAGE"] = w.image
+                cmd += ["--profile", "eudi"]
     cmd += list(extra)
     log.info("$ %s", " ".join(cmd))
     return subprocess.call(cmd, env=env)
@@ -154,10 +164,15 @@ def _compose(args: argparse.Namespace, t: TargetProfile, *extra: str) -> int:
 def cmd_up(args: argparse.Namespace) -> int:
     loaded = _load(args)
     t = loaded.model
-    if t.wallet.mode == "managed" and any(p.id in WALLET_PROFILES for p in t.profiles):
+    waltid = next((w for w in t.wallets if w.type == "waltid-wallet2" and w.mode == "managed"), None)
+    if waltid and any(p.id in WALLET_PROFILES for p in t.profiles):
         from .wallets.waltid_config import ensure_default
 
-        ensure_default(t.wallet.image)
+        ensure_default(waltid.image)
+    from .wallets.waltid_config import state_dir
+
+    # Bind-mount sources must exist: some Docker runtimes cannot create them (chown denied).
+    (state_dir() / "eudi").mkdir(parents=True, exist_ok=True)
     rc = _compose(args, t, "up", "-d", "--wait")
     if rc == 0 and loaded.model.suite.mode == "managed":
         RunContext(loaded, "up", Path(".")).suite.wait_until_ready()
@@ -189,7 +204,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "verifier": ", ".join(t.verifier.start_presentation) if t.verifier else None,
         },
         suite={"url": t.suite.url},
-        wallet={"type": t.wallet.type, "url": t.wallet.url, "image": t.wallet.image},
+        wallet={"wallets": [{"type": w.type, "url": w.url, "image": w.image} for w in t.wallets]},
         config=redact(loaded.raw),
     )
     (out_dir / "target.effective.json").write_text(json.dumps(run.config, indent=2))

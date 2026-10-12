@@ -140,7 +140,7 @@ footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
     <div><dt>Target</dt><dd>{{ run.target.name or "–" }}</dd></div>
     {% if run.target.issuer %}<div><dt>Credential issuer</dt><dd>{{ run.target.issuer }}</dd></div>{% endif %}
     <div><dt>Conformance suite</dt><dd>{{ run.suite.url or "–" }}{% if run.suite.version %} · {{ run.suite.version }}{% endif %}</dd></div>
-    <div><dt>Wallet</dt><dd>{{ run.wallet.type or "–" }}{% if run.wallet.image %} · <span class="mono">{{ run.wallet.image }}</span>{% endif %}</dd></div>
+    <div><dt>Wallets</dt><dd>{% for w in run.wallet.wallets or [] %}{{ w.type }} · <span class="mono">{{ w.image }}</span>{% if not loop.last %}<br>{% endif %}{% else %}–{% endfor %}</dd></div>
     <div><dt>Totals</dt><dd>
       {% for o in outcomes %}<span class="dot o-{{ o }}"></span>{{ totals[o] }} {{ labels[o] }}{% if not loop.last %} · {% endif %}{% endfor %}
     </dd></div>

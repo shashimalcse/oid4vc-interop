@@ -113,3 +113,12 @@ def test_shipped_targets_are_valid(name):
     }
     loaded = load_target(ROOT / "targets" / name, env=env)
     assert loaded.model.name == name
+
+
+def test_wallet_list_defaults_per_type(tmp_path):
+    text = MINIMAL + "wallets: [eudi, {type: waltid-wallet2, mode: external, url: http://w2:1}]\n"
+    t = load_target(target(tmp_path, text), env={"PASS": "x"}).model
+    assert [(w.type, w.url, w.mode) for w in t.wallets] == [
+        ("eudi", "http://localhost:7007", "managed"), ("waltid-wallet2", "http://w2:1", "external")]
+    with pytest.raises(ConfigError, match="listed once"):
+        load_target(target(tmp_path, MINIMAL + "wallets: [eudi, eudi]\n"), env={"PASS": "x"})

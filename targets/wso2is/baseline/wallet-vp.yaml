@@ -1,9 +1,15 @@
-# Wallet2 presenting the vcit test PID to the IS verifier. Observed 2026-10-12 (Wallet2 1.1.1,
-# IS 7.4.0-SNAPSHOT / identity-openid4vc 1.1.16).
+# Real wallets presenting the vcit test PID to the IS verifier. Observed 2026-10-12
+# (IS 7.4.0-SNAPSHOT / identity-openid4vc 1.1.16; walt.id Wallet2 1.1.1; EUDI openid4vp 0.16.2).
 profile: wallet-vp
 cases:
-  presentation.request:
+  waltid-wallet2/presentation.request:
     expect: FAILED
     reason: >-
-      IS GET /oid4vp/requests/{id} answers 406: the JAX-RS endpoint is @Produces("application/oauth-authz-req+jwt")
-      and Wallet2 sends Accept: application/json. IS should serve the request object regardless of Accept.
+      IS GET /oid4vp/requests/{id} answers 406 to Wallet2's Accept: application/json (the endpoint is
+      @Produces("application/oauth-authz-req+jwt")). Not a spec violation on either side; IS should
+      serve the request object regardless of Accept. The EUDI wallet fetches it fine.
+  eudi/presentation.request:
+    expect: FAILED
+    reason: >-
+      client_id x509_san_dns:<tenant> does not match the response_uri host (OID4VP 5.9.3): the tenant
+      request certificate's SAN DNS is the tenant name, not the public hostname. The EUDI library refuses.

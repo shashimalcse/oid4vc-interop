@@ -81,8 +81,10 @@ profiles:
 
 suite:
   mode: managed
-wallet:
-  mode: managed
+# Each wallet-* profile runs once per wallet listed here.
+wallets:
+  - type: waltid-wallet2
+  - type: eudi
 report:
   out_dir: ./out
   fail_on: regression

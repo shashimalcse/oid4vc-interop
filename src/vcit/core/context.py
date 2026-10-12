@@ -100,10 +100,21 @@ class RunContext:
         return Verifier(self)
 
     @cached_property
+    def wallets(self):
+        """A driver per configured wallet, in config order."""
+        from ..wallets.driver import make_driver
+
+        return [make_driver(w) for w in self.target.wallets]
+
+    @cached_property
     def wallet(self):
+        """The Wallet2 client, for the issuance steps only Wallet2 supports so far."""
         from ..wallets.waltid import Wallet2Client
 
-        return Wallet2Client(self.target.wallet.url)
+        w = next((w for w in self.target.wallets if w.type == "waltid-wallet2"), None)
+        if w is None:
+            raise RuntimeError("wallet-interop issuance needs a waltid-wallet2 entry in wallets")
+        return Wallet2Client(w.url)
 
     @cached_property
     def browser(self):
@@ -112,6 +123,8 @@ class RunContext:
         return Browser(self.artifacts)
 
     def close(self) -> None:
+        for d in self.__dict__.get("wallets", []):
+            d.close()
         for attr in ("browser", "suite", "wallet", "issuer", "verifier"):
             if attr in self.__dict__:
                 try:

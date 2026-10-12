@@ -5,8 +5,11 @@ report. vcit combines two kinds of evidence:
 
 - **Spec conformance:** the [OpenID Foundation conformance suite](https://gitlab.com/openid/conformance-suite)
   plays the wallet against your issuer or verifier.
-- **Real-wallet interop:** [walt.id Wallet2](https://docs.walt.id/community-stack/wallet2/getting-started)
-  obtains a credential from your issuer (authorization-code flow), then presents it to your verifier.
+- **Real-wallet interop:** real wallet stacks talk to your issuer and verifier. Each wallet you list
+  runs the wallet profiles, and the report shows them side by side:
+  - [walt.id Wallet2](https://docs.walt.id/community-stack/wallet2/getting-started) (`waltid-wallet2`);
+  - the EUDI reference library [eudi-lib-jvm-openid4vp-kt](https://github.com/eu-digital-identity-wallet/eudi-lib-jvm-openid4vp-kt) (`eudi`).
+    It runs as a small HTTP wallet in [wallets/eudi](wallets/eudi), built by `vcit up`.
 
 | Test profile | What runs | Against |
 |---|---|---|
@@ -14,7 +17,8 @@ report. vcit combines two kinds of evidence:
 | `vci-haip` | suite `oid4vci-1_0-issuer-haip-test-plan` | issuer |
 | `vp-base` | suite `oid4vp-1final-verifier-test-plan` (`vp_profile=plain_vp`) | verifier |
 | `vp-haip` | suite `oid4vp-1final-verifier-haip-test-plan` | verifier |
-| `wallet-interop` | Wallet2: issuance, then presentation | issuer + verifier |
+| `wallet-vp` | each wallet presents a test PID (signed by the run's test CA) | verifier |
+| `wallet-interop` | Wallet2: issuance, then presentation (EUDI issuance to come) | issuer + verifier |
 
 ## Target profiles
 

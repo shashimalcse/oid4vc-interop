@@ -1,6 +1,7 @@
 # Managed services for vcit. `vcit up` selects the compose profiles from the run config:
 #   suite  - OIDF conformance suite (mongodb + server + nginx)
 #   wallet - walt.id Wallet2
+#   eudi   - vcit's wallet on the EUDI reference libraries (built from wallets/eudi)
 #
 # vcit itself runs on the host (or the CI runner VM), not in a container. It needs docker to
 # restart Wallet2 after rendering its trust configuration. The suite is reachable from the host
@@ -64,6 +65,16 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  eudi-wallet:
+    profiles: [eudi]
+    image: ${EUDI_WALLET_IMAGE:-vcit/eudi-wallet:dev}
+    build: ../wallets/eudi
+    ports:
+      - "7007:7007"
+    environment:
+      VCIT_TRUST_ANCHORS: /vcit/anchors.pem
+    volumes:
+      - ${VCIT_STATE_DIR:-../.vcit}/eudi:/vcit
 
 volumes:
   mongo-data:

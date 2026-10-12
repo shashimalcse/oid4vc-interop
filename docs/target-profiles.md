@@ -64,7 +64,10 @@ baseline_dir: baseline
 profiles: [vp-base, {id: vp-haip, variants: {credential_format: sd_jwt_vc}}]
 modules: {include: [], exclude: []}
 suite: {mode: managed, url: https://localhost.emobix.co.uk:8443, alias_prefix: vcit}
-wallet: {mode: managed, url: http://localhost:7006, image: waltid/wallet-api2:1.1.1}
+wallets:                              # wallet-* profiles run once per wallet
+  - type: waltid-wallet2              # defaults: http://localhost:7006, waltid/wallet-api2:1.1.1
+  - type: eudi                        # defaults: http://localhost:7007, vcit/eudi-wallet:dev (wallets/eudi)
+    # mode: external, url: ...        # a wallet you run yourself
 report: {out_dir: ./out, fail_on: regression}
 ```
 
