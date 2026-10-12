@@ -1,0 +1,86 @@
+# ThunderID as OpenID4VCI issuer and OpenID4VP verifier.
+#
+# ThunderID runs as a container on the vcit network (docker/up.sh), reachable as
+# https://thunder.localtest.me:8090 from the host and from the suite and wallet containers.
+# hooks/setup.py provisions per run through the management APIs; teardown.py removes it.
+# See CONFIGURATION.md.
+
+name: thunderid
+description: ThunderID (OID4VCI issuer + OID4VP verifier)
+env_files: [local.env]
+
+issuer:
+  credential_issuer: "${THUNDER_URL:-https://thunder.localtest.me:8090}"
+  credential_configuration_id: "${setup.credential_configuration_id}"
+  clients:
+    - client_id: "${setup.clients.0.client_id}"
+    - client_id: "${setup.clients.1.client_id}"
+  wallet_client:
+    client_id: "${setup.wallet_client.client_id}"
+  login:
+    username: "${setup.user.username}"
+    password: "${setup.user.password}"
+    selectors:            # the gate's default sign-in flow
+      username: ["input#username"]
+      password: ["input#password"]
+      submit: ["button#action_001"]
+  expected_claims:
+    given_name: Ada
+    family_name: Lovelace
+    email: ada@example.org
+
+verifier:
+  start_presentation:
+    suite:
+      http:
+        method: POST
+        url: "${THUNDER_URL:-https://thunder.localtest.me:8090}/openid4vp/initiate"
+        json:
+          definition_id: "${setup.presentation_definitions.suite}"
+      wallet_url: $.wallet_url
+      session: $.txn_id
+    wallet:
+      http:
+        method: POST
+        url: "${THUNDER_URL:-https://thunder.localtest.me:8090}/openid4vp/initiate"
+        json:
+          definition_id: "${setup.presentation_definitions.wallet}"
+      wallet_url: $.wallet_url
+      session: $.txn_id
+  result:
+    # A terminal status can be read only once; it carries the verified claims in result_token.
+    http:
+      url: "${THUNDER_URL:-https://thunder.localtest.me:8090}/openid4vp/status/{{ session }}"
+    status: $.status
+    success: [COMPLETED]
+    pending: [PENDING]
+    claims_jwt: $.result_token
+
+hooks:
+  setup: [python, hooks/setup.py]
+  teardown: [python, hooks/teardown.py]
+
+# ThunderID's verifier trust anchors are static configuration, so the test CA is fixed:
+# `vcit keygen --target targets/thunderid` creates it, docker/up.sh mounts it.
+pki:
+  ca_cert_file: keys/test-ca.crt
+  ca_key_file: keys/test-ca.key
+
+baseline_dir: baseline
+
+profiles:
+  - id: vp-base
+    variants: {client_id_prefix: x509_hash, response_mode: direct_post.jwt}
+  - vp-haip
+  - wallet-vp
+  - vci-base
+  - wallet-interop
+
+wallets:
+  - type: waltid-wallet2
+  - type: eudi
+
+suite:
+  mode: managed
+report:
+  out_dir: ./out

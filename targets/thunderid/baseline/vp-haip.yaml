@@ -1,0 +1,14 @@
+# oid4vp-1final-verifier-haip-test-plan. Observed 2026-10-12 against ThunderID 1.0.1.
+profile: vp-haip
+cases:
+  "oid4vp-1final-verifier-*":
+    expect: FAILED
+    reason: >-
+      request object signed with a self-signed certificate; for accepted presentations the
+      direct_post response has no redirect_uri (HAIP 5.1)
+    conditions:
+      - ValidateRequestObjectSignatureAgainstX5cHeader
+      - VP1FinalEnsureDirectPostResponseHasRedirectUriForHaip
+  oid4vp-1final-verifier-request-uri-method-post:
+    expect: SKIPPED
+    reason: "request_uri_method=post not offered (optional)"

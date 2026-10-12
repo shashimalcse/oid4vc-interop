@@ -1,0 +1,12 @@
+# oid4vp-1final-verifier-test-plan (plain_vp, x509_hash, request_uri_signed, direct_post.jwt).
+# Observed 2026-10-12 against ThunderID 1.0.1. Verification itself is correct: the happy flows
+# end COMPLETED and every negative module is rejected for the injected flaw.
+profile: vp-base
+cases:
+  "oid4vp-1final-verifier-*":
+    expect: FAILED
+    reason: "request object signed with a self-signed certificate (the setup-generated ecdsa-key)"
+    conditions: [ValidateRequestObjectSignatureAgainstX5cHeader]
+  oid4vp-1final-verifier-request-uri-method-post:
+    expect: SKIPPED
+    reason: "request_uri_method=post not offered (optional)"

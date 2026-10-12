@@ -197,4 +197,9 @@ class Verifier:
         if ok and poll.details is not None:
             r, _ = execute(poll.details, self._vars(session=session))
             details = r.text
+        if ok and poll.claims_jwt and body is not None:
+            try:
+                details = json.dumps(decode_jwt(str(jsonpath(body, poll.claims_jwt)))[1])
+            except Exception as e:  # a malformed token is the verifier's problem; report it
+                details = f"could not decode {poll.claims_jwt}: {e}"
         return Verdict(status, ok, body, details)

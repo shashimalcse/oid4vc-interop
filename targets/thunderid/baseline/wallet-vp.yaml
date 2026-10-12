@@ -1,0 +1,12 @@
+# Real wallets presenting the vcit test PID to ThunderID. Observed 2026-10-12 (ThunderID 1.0.1,
+# walt.id Wallet2 1.1.1, EUDI openid4vp 0.16.2). Both refuse the request object: it has no aud.
+# OpenID4VP expects aud = https://self-issued.me/v2 for wallets without published metadata; the
+# conformance suite does not check it, real wallets do.
+profile: wallet-vp
+cases:
+  waltid-wallet2/presentation.request:
+    expect: FAILED
+    reason: "request object has no aud (Wallet2 requires https://self-issued.me/v2)"
+  eudi/presentation.request:
+    expect: FAILED
+    reason: "request object has no aud (EUDI library: 'JAR is missing aud')"

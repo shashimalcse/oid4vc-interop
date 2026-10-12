@@ -1,0 +1,17 @@
+# oid4vci-1_0-issuer-test-plan. Observed 2026-10-12 against ThunderID 1.0.1.
+profile: vci-base
+cases:
+  "oid4vci-1_0-issuer-*":
+    expect: FAILED
+    reason: >-
+      PAR answers invalid_target "No resource parameter supplied and no default resource server
+      is configured": the credential configuration's scope (advertised in issuer metadata) is
+      treated as a permission scope that needs an RFC 8707 resource, which wallets do not send
+    conditions: [CheckPAREndpointResponse201WithNoError]
+  oid4vci-1_0-issuer-metadata-test:
+    expect: FAILED
+    reason: "credential configuration claims is a pre-final name-keyed object, not the OID4VCI 1.0 array (fixed on main, d124d591e)"
+    conditions: [VCICredentialIssuerMetadataValidation]
+  oid4vci-1_0-issuer-metadata-test-signed: SKIPPED
+  oid4vci-1_0-issuer-fail-invalid-key-attestation-signature: SKIPPED
+  oid4vci-1_0-issuer-fail-unsupported-encryption-algorithm: SKIPPED

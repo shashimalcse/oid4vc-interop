@@ -83,6 +83,9 @@ class ResultPoll(_Model):
     success: list[str]
     pending: list[str] = Field(default_factory=list)
     details: HttpRequest | None = None  # fetched after success; claim values are looked for here
+    # JSONPath to a JWT in the poll response whose payload carries the verified claims (e.g. a
+    # result token); vcit decodes it, without verifying, and looks for claim values there.
+    claims_jwt: str | None = None
     timeout: float = 30
 
 
