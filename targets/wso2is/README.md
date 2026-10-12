@@ -20,18 +20,13 @@ what the selected profiles need:
 
 ## Running it
 
-1. IS 7.4.0+ with the verifier enabled in `deployment.toml`:
-   ```toml
-   [openid4vp]
-   enabled = true
-   ```
-2. IS must be reachable from the host and from docker under one URL; an ngrok tunnel works.
-   `docker/build.sh` builds an image whose hostname is `is.vcit.local` for CI.
-3. `cp local.env.example local.env`, then fill in the URLs. Both URLs include `/t/<tenant>`.
-4. From the repository root:
+1. Configure IS as described in **[CONFIGURATION.md](CONFIGURATION.md)**: `deployment.toml`, one
+   public URL, the tenant, and the tenant's OID4VP verifier settings.
+2. `cp local.env.example local.env`, then fill in the URLs. Both URLs include `/t/<tenant>`.
+3. From the repository root:
    ```bash
    vcit up  --target targets/wso2is
-   vcit run --target targets/wso2is --profile vp-base
+   vcit run --target targets/wso2is --profile vp-haip
    ```
 
 ## Baseline
