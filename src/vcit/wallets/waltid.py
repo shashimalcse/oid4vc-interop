@@ -101,15 +101,19 @@ class Wallet2Client:
         redirect_uri: str,
     ) -> dict[str, Any]:
         """Wallet-initiated: Wallet2 resolves metadata, pushes the request if PAR is required,
-        and returns the URL to open plus the PKCE verifier."""
-        body = {
-            "credentialIssuer": credential_issuer,
-            "credentialConfigurationIds": configuration_ids,
-            "clientId": client_id,
-            "redirectUri": redirect_uri,
-            "usePkce": True,
+        and returns the URL to open plus the PKCE verifier.
+
+        Wallet2 1.1.x takes the issuer and configurations as a credential offer, so vcit passes
+        the offer a wallet-initiated flow is equivalent to (authorization_code grant, no
+        issuer_state). The configuration's `scope` from the issuer metadata is requested.
+        """
+        offer = {
+            "credential_issuer": credential_issuer,
+            "credential_configuration_ids": configuration_ids,
+            "grants": {"authorization_code": {}},
         }
-        return self._call("POST", f"/wallet/{wallet_id}/credentials/receive/authorization-url/batch", body)
+        body = {"offerJson": offer, "clientId": client_id, "redirectUri": redirect_uri, "usePkce": True, "useScope": True}
+        return self._call("POST", f"/wallet/{wallet_id}/credentials/receive/authorization-url", body)
 
     def receive_authorized(self, wallet_id: str, body: dict[str, Any]) -> dict[str, Any]:
         return self._call("POST", f"/wallet/{wallet_id}/credentials/receive/authorized", body)

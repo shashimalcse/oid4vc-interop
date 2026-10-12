@@ -10,12 +10,8 @@ from typing import Any
 
 import httpx
 
-# Credential claim name -> IS local claim URI, and how SCIM sets the user's value.
-CLAIM_URIS = {
-    "given_name": "http://wso2.org/claims/givenname",
-    "family_name": "http://wso2.org/claims/lastname",
-    "email": "http://wso2.org/claims/emailaddress",
-}
+# VC templates reference claims of the VC dialect (http://wso2.org/vc/claim), whose claim URIs are
+# the bare names (given_name -> http://wso2.org/claims/givenname, etc.).
 
 
 def log(msg: str) -> None:
@@ -48,7 +44,7 @@ class ISAdmin:
             "description": "vcit test credential",
             "format": "dc+sd-jwt",
             "expiresIn": 31536000,
-            "claims": [{"name": c, "type": "LOCAL", "claimUri": CLAIM_URIS[c]} for c in claims],
+            "claims": [{"name": c, "type": "LOCAL", "claimUri": c} for c in claims],
         }
         return self._req("POST", "/api/server/v1/vc-templates", (201,), json=body).json()
 

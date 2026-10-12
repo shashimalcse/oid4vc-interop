@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import logging
 import re
+from urllib.parse import parse_qs, urlparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -67,13 +68,17 @@ def _data_uri(png: bytes) -> str:
 
 
 def _first(page: Page, selectors: list[str], timeout: float = 0) -> str | None:
+    """The first selector with a visible match, waiting up to `timeout` ms for any of them."""
+    if timeout:
+        try:
+            page.wait_for_selector(", ".join(selectors), state="visible", timeout=timeout)
+        except PlaywrightTimeout:
+            return None
     for s in selectors:
         try:
-            if timeout:
-                page.wait_for_selector(s, state="visible", timeout=timeout)
             if page.locator(s).first.is_visible():
                 return s
-        except PlaywrightTimeout:
+        except Exception:  # an invalid selector for this page type
             continue
     return None
 
@@ -152,7 +157,10 @@ class Browser:
             for _ in range(10):
                 if caught or done(page):
                     break
-                if not logged_in and _first(page, sel.username + sel.password, timeout=3000):
+                if _looks_like_error(page):
+                    shot = _data_uri(page.screenshot(full_page=True))
+                    raise LoginError(f"the authorization server showed an error page at {page.url}", shot)
+                if not logged_in and _first(page, sel.username + sel.password, timeout=5000):
                     self._fill_login(page, username, password, sel)
                     logged_in = True
                     continue
@@ -210,10 +218,14 @@ class Browser:
             return _data_uri(page.screenshot(full_page=True))
 
 
-_ERROR_HINTS = ("error.do", "/retry.do", "/error?", "/error/", "error=")
+_ERROR_PATHS = ("error.do", "/retry.do", "/error")
 
 
 def _looks_like_error(page: Page) -> bool:
-    url = page.url.lower()
-    return any(h in url for h in _ERROR_HINTS) and "code=" not in url
+    """An authorization-server error page (not a redirect that carries a code)."""
+    u = urlparse(page.url)
+    params = parse_qs(u.query)
+    if "code" in params:
+        return False
+    return "error" in params or any(h in u.path.lower() for h in _ERROR_PATHS)
 

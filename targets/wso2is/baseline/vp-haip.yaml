@@ -2,9 +2,11 @@
 # sd_jwt_vc, direct_post.jwt). Observed 2026-10-12 against IS 7.4.0-SNAPSHOT (identity-openid4vc
 # 1.1.16) configured for x509_hash + direct_post.jwt. Numbers in brackets refer to the gap analysis.
 #
-# The suite now posts encrypted presentations and IS decrypts them, but IS rejects every one:
-# server_error from the missing-_sd_alg digest bug, except invalid-credential-signature
-# (VPV-60011, a correct rejection). IS answers the POST with 200 {} (no redirect_uri).
+# The suite posts encrypted presentations and IS decrypts and verifies them. With the _sd_alg
+# default fix (identity-openid4vc branch fix/sd-jwt-default-sd-alg, deployed 2026-10-12) valid
+# presentations end VERIFIED and every negative module is rejected for its own flaw (VPV-60010
+# KB-JWT signature, 60011 issuer, 60017 sd_hash, 60007 nonce, 60016 aud, 60021 iat). Modules still
+# fail on the request-level gaps below; IS answers the POST with 200 {} (no redirect_uri).
 profile: vp-haip
 cases:
   "oid4vp-1final-verifier-*":
