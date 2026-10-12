@@ -11,5 +11,6 @@ cases:
   eudi/presentation.request:
     expect: FAILED
     reason: >-
-      client_id x509_san_dns:<tenant> does not match the response_uri host (OID4VP 5.9.3): the tenant
-      request certificate's SAN DNS is the tenant name, not the public hostname. The EUDI library refuses.
+      client_metadata has the pre-final vp_formats instead of the required vp_formats_supported (gap #6);
+      the EUDI library refuses to parse it. (With x509_hash the client_id check now passes; with
+      x509_san_dns it failed earlier on the tenant-name SAN not matching the response_uri host.)

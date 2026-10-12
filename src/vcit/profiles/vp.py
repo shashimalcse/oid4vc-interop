@@ -87,14 +87,21 @@ class VpWaitingHandler:
     def finish(self, m: ModuleContext) -> None:
         """Record what the verifier concluded, when the target says how to ask."""
         p = m.scratch.get("presentation")
-        if p is None:
-            return
+        if p is None or not self._suite_posted(m):
+            return  # nothing reached the verifier: there is no verdict to wait for
         verdict = self._verdict(m)
         if verdict.ok is None:
             return
         m.steps.append(
             Step(f"verifier result: {verdict.status}", "PASSED" if verdict.ok else "FAILED", json.dumps(verdict.body)[:2000])
         )
+
+    def _suite_posted(self, m: ModuleContext) -> bool:
+        """Whether the suite actually sent a presentation to the verifier's response_uri."""
+        try:
+            return any(e.get("src") == "CallDirectPostEndpoint" for e in self.ctx.suite.log(m.test_id))
+        except Exception:
+            return True  # when in doubt, ask the verifier
 
     def _verdict(self, m: ModuleContext):
         if "verdict" not in m.scratch:

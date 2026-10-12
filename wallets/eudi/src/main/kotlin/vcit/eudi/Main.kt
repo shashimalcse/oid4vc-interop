@@ -234,7 +234,14 @@ private suspend fun present(wallet: Wallet, url: String, send: Boolean): Any {
     val rec = RecordingClient()
     rec.client.use { http ->
         val vp = OpenId4Vp.overRedirects(config, http)
-        val request = when (val r = vp.resolveRequestUri(url)) {
+        // The library reports most problems as Resolution.Invalid, but some (e.g. client_metadata
+        // that does not deserialize) escape as exceptions; report both the same way.
+        val resolution = runCatching { vp.resolveRequestUri(url) }.getOrElse { e ->
+            val msg = "${e::class.simpleName}: ${e.message}"
+            return if (send) Presented(false, "resolve", error = msg, http = rec.records)
+            else Resolved(false, error = msg, http = rec.records)
+        }
+        val request = when (val r = resolution) {
             is Resolution.Success -> r.requestObject
             is Resolution.Invalid ->
                 return if (send) Presented(false, "resolve", error = describe(r), http = rec.records)
