@@ -1,0 +1,7 @@
+.venv/
+.vcit/
+out/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+targets/*/keys/
