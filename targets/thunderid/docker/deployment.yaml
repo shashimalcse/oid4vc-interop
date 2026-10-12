@@ -84,8 +84,9 @@ email:
 
 # vcit: advertise PAR as required (HAIP/FAPI 2.0 want PAR), so wallets know to use it. A per-app
 # requirement alone is not discoverable from the authorization server metadata.
-par:
-  require_par: true
+oauth:
+  par:
+    require_par: true
 
 # vcit: verifier settings. x509_hash, because the request certificate's SAN is "localhost", which
 # does not match the response_uri host (wallets refuse x509_san_dns then). The vcit test CA is

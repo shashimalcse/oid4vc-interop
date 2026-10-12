@@ -43,11 +43,16 @@ class ThunderAdmin:
         redirect = f"{self.base}/console"
         verifier = _b64(secrets.token_bytes(32))
         challenge = _b64(hashlib.sha256(verifier.encode()).digest())
-        r = self.http.get(f"{self.base}/oauth2/authorize", params={
+        # Always through PAR: it works whether or not the server requires it.
+        par = self.http.post(f"{self.base}/oauth2/par", data={
             "response_type": "code", "client_id": "CONSOLE", "redirect_uri": redirect, "scope": "system",
             "state": "vcit", "resource": os.environ.get("THUNDER_SYSTEM_RESOURCE", SYSTEM_RESOURCE),
             "code_challenge": challenge, "code_challenge_method": "S256",
         })
+        if par.status_code not in (200, 201):
+            raise RuntimeError(f"PAR for the admin login: HTTP {par.status_code}: {par.text[:300]}")
+        r = self.http.get(f"{self.base}/oauth2/authorize",
+                          params={"client_id": "CONSOLE", "request_uri": par.json()["request_uri"]})
         if r.status_code not in (302, 303, 307):
             raise RuntimeError(f"authorize: HTTP {r.status_code}: {r.text[:300]}")
         q = parse_qs(urlparse(r.headers["Location"]).query)
@@ -126,6 +131,21 @@ class ThunderAdmin:
         if trust:
             body.update({"enforceTrustedIssuer": True, "trustedAuthorities": [trust]})
         return self._post("/openid4vp/presentation-definitions", body)["id"]
+
+    def create_resource_server(self, name: str, identifier: str) -> str:
+        return self._post("/resource-servers", {"name": name, "identifier": identifier, "ouId": self.ou})["id"]
+
+    def delete_resource_server(self, rs_id: str) -> None:
+        self._delete(f"/resource-servers/{rs_id}")
+
+    def get_default_resource_server(self) -> dict[str, Any]:
+        r = self.http.get(f"{self.base}/server-config/defaultResourceServer")
+        return r.json() if r.status_code == 200 else {}
+
+    def set_default_resource_server(self, value: dict[str, Any]) -> None:
+        r = self.http.put(f"{self.base}/server-config/defaultResourceServer", json=value)
+        if r.status_code not in (200, 204):
+            raise RuntimeError(f"PUT /server-config/defaultResourceServer: HTTP {r.status_code}: {r.text[:300]}")
 
     def delete_presentation_definition(self, definition_id: str) -> None:
         self._delete(f"/openid4vp/presentation-definitions/{definition_id}")

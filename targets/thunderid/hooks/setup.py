@@ -22,7 +22,7 @@ def main() -> None:
     profiles = set(ctx["profiles"])
     tag = f"vcit-{ctx['run_id'][-4:]}"
     admin = ThunderAdmin()
-    cleanup: dict[str, list[str]] = {"apps": [], "configurations": [], "users": [], "definitions": []}
+    cleanup: dict = {"apps": [], "configurations": [], "users": [], "definitions": [], "resource_servers": []}
     out: dict = {
         "credential_configuration_id": UNUSED,
         "clients": [{"client_id": UNUSED}, {"client_id": UNUSED}],
@@ -39,6 +39,16 @@ def main() -> None:
             cleanup["configurations"].append(cfg["id"])
             out["credential_configuration_id"] = handle
             log(f"credential configuration {handle}")
+
+            if os.environ.get("THUNDER_DEFAULT_RESOURCE_SERVER") == "1":
+                # Opt-in workaround for the scope/resource gap (see baseline): bind tokens for
+                # requests without an RFC 8707 resource to a per-run resource server, so the rest
+                # of issuance can be tested. The previous setting is restored on teardown.
+                cleanup["previous_default_resource_server"] = admin.get_default_resource_server()
+                rs = admin.create_resource_server(f"{tag}-issuer", f"urn:vcit:{tag}:credential-issuer")
+                cleanup["resource_servers"].append(rs)
+                admin.set_default_resource_server({"resourceServerId": rs})
+                log(f"defaultResourceServer -> {tag}-issuer (workaround)")
 
             username = f"{tag}-user"
             password = os.environ.get("TEST_USER_PASSWORD", "Vcit-Test-Pass-1")

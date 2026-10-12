@@ -8,12 +8,21 @@ import sys
 from thunder_admin import ThunderAdmin, log
 
 
-def remove(admin: ThunderAdmin, cleanup: dict[str, list[str]]) -> None:
+def remove(admin: ThunderAdmin, cleanup: dict) -> None:
+    if "previous_default_resource_server" in cleanup:
+        previous = cleanup["previous_default_resource_server"] or {}
+        writable = previous.get("writable", previous) if isinstance(previous, dict) else {}
+        try:
+            admin.set_default_resource_server(writable if isinstance(writable, dict) else {})
+            log("restored defaultResourceServer")
+        except Exception as e:
+            log(f"could not restore defaultResourceServer: {e}")
     steps = [
         ("definitions", admin.delete_presentation_definition),
         ("apps", admin.delete_app),
         ("users", admin.delete_user),
         ("configurations", admin.delete_credential_configuration),
+        ("resource_servers", admin.delete_resource_server),
     ]
     for kind, delete in steps:
         for resource_id in cleanup.get(kind, []):

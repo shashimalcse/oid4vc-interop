@@ -1,10 +1,9 @@
-# Baseline for oid4vp-1final-verifier-test-plan (vp_profile=plain_vp, sd_jwt_vc, x509_san_dns,
+# Baseline for oid4vp-1final-verifier-test-plan (vp_profile=plain_vp, sd_jwt_vc, x509_hash,
 # request_uri_signed, direct_post.jwt). Observed 2026-10-12 against IS 7.4.0-SNAPSHOT
-# (identity-openid4vc 1.1.16). Numbers in brackets refer to the gap analysis.
+# (identity-openid4vc 1.1.16 + the _sd_alg default fix). HAIP-GAPS.md numbers in brackets.
 #
-# Every module fails while validating IS's signed request, before the presentation matters.
-# Not yet visible to the suite: IS also rejects the suite's SD-JWT with server_error
-# ("Hash algorithm cannot be null"): it does not default a missing _sd_alg to sha-256.
+# IS verifies correctly: valid presentations end VERIFIED and every negative module is rejected
+# for its own flaw. Modules fail only on request-object checks.
 profile: vp-base
 cases:
   "oid4vp-1final-verifier-*":

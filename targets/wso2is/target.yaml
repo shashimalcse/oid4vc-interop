@@ -74,7 +74,8 @@ baseline_dir: baseline
 profiles:
   - vci-base
   - vci-haip
-  - vp-base
+  - id: vp-base          # must match the tenant's /configs/openid4vp (see CONFIGURATION.md section 5)
+    variants: {client_id_prefix: x509_hash, response_mode: direct_post.jwt}
   - vp-haip
   - wallet-vp
   - wallet-interop
