@@ -1,21 +1,16 @@
 # Baseline for oid4vp-1final-verifier-test-plan (vp_profile=plain_vp, sd_jwt_vc, x509_hash,
 # request_uri_signed, direct_post.jwt). Observed 2026-10-13 against IS 7.4.0-SNAPSHOT super tenant
-# (identity-openid4vc 1.1.16 + the _sd_alg default fix), with a CA-issued request-signing
-# certificate (tools/install_request_cert.py). Numbers in brackets refer to the gap analysis.
+# with a CA-issued request-signing certificate (tools/install_request_cert.py) and identity-openid4vc
+# 1.1.16 plus two unreleased fixes:
+#   - fix/sd-jwt-default-sd-alg: default a missing _sd_alg to sha-256;
+#   - fix/vp-client-metadata-final: no client_id_scheme, vp_formats_supported, encryption JWK with
+#     alg/use, encrypted_response_enc_values_supported.
+# Against stock 1.1.16 every module fails on those checks.
 #
-# IS verifies correctly: valid presentations end VERIFIED and every negative module is rejected
-# for its own flaw. Modules fail only on request-object client_metadata checks.
+# All modules pass. The suite warns (not fails) on client_name in client_metadata: it is RFC 7591
+# metadata, which OID4VP 1.0 §5.1 allows, but not on the suite's list.
 profile: vp-base
 cases:
-  "oid4vp-1final-verifier-*":
-    expect: FAILED
-    reason: >-
-      [#7] client_id_scheme still sent; [#6] client_metadata lacks vp_formats_supported;
-      [#5] encryption JWK has no alg
-    conditions:
-      - CheckNoClientIdSchemeParameter
-      - VP1FinalValidateVpFormatsSupportedInClientMetadata
-      - VP1FinalValidateClientMetadataJwksForEncryptedResponse
   oid4vp-1final-verifier-request-uri-method-post:
     expect: SKIPPED
     reason: "[VP-43] request_uri_method=post not offered (optional)"

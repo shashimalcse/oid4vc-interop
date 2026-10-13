@@ -1,5 +1,10 @@
-# Real wallets presenting the vcit test PID to the IS verifier. Observed 2026-10-12
-# (IS 7.4.0-SNAPSHOT / identity-openid4vc 1.1.16; walt.id Wallet2 1.1.1; EUDI openid4vp 0.16.2).
+# Real wallets presenting the vcit test PID to the IS verifier. Observed 2026-10-13
+# (IS 7.4.0-SNAPSHOT super tenant, x509_hash + direct_post.jwt, identity-openid4vc 1.1.16 plus the
+# unreleased fix/sd-jwt-default-sd-alg and fix/vp-client-metadata-final branches; walt.id Wallet2
+# 1.1.1; EUDI openid4vp 0.16.2).
+#
+# The EUDI wallet presents end to end and IS verifies. Against stock 1.1.16 it refuses the request:
+# client_metadata has the pre-final vp_formats instead of vp_formats_supported.
 profile: wallet-vp
 cases:
   waltid-wallet2/presentation.request:
@@ -8,9 +13,3 @@ cases:
       IS GET /oid4vp/requests/{id} answers 406 to Wallet2's Accept: application/json (the endpoint is
       @Produces("application/oauth-authz-req+jwt")). Not a spec violation on either side; IS should
       serve the request object regardless of Accept. The EUDI wallet fetches it fine.
-  eudi/presentation.request:
-    expect: FAILED
-    reason: >-
-      client_metadata has the pre-final vp_formats instead of the required vp_formats_supported (gap #6);
-      the EUDI library refuses to parse it. (With x509_hash the client_id check now passes; with
-      x509_san_dns it failed earlier on the tenant-name SAN not matching the response_uri host.)

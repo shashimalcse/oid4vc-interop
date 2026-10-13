@@ -51,8 +51,11 @@ def main() -> None:
 
             callbacks = list(ctx["suite"]["callbacks"].values())
             if callbacks:
+                # FAPI 2.0 apps get `iss` in the authorization response (RFC 9207); the suite requires it.
+                fapi2 = admin.fapi2_allowed()
+                log(f"suite clients: FAPI 2.0 {'on' if fapi2 else 'off (the organization does not allow FAPI2_SECURITY)'}")
                 for i, key in enumerate(ctx["clients"]):
-                    app = admin.create_app(f"{tag}-suite-client{i + 1}", callbacks, key["cert_pem"])
+                    app = admin.create_app(f"{tag}-suite-client{i + 1}", callbacks, key["cert_pem"], fapi2=fapi2)
                     cleanup["apps"].append(app["id"])
                     admin.authorize_api(app["id"], resource, identifier)
                     out["clients"][i] = {"client_id": app["client_id"]}

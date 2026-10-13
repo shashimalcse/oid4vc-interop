@@ -61,8 +61,20 @@ class ISAdmin:
             time.sleep(1)
         raise RuntimeError(f"no API resource named {name}")
 
-    def create_app(self, name: str, callbacks: list[str], cert_pem: str) -> dict[str, str]:
-        """Confidential client: private_key_jwt (ES256), PKCE S256, PAR, DPoP-bound JWT tokens."""
+    def fapi2_allowed(self) -> bool:
+        """Whether the organization's FAPI config lets apps use the FAPI 2.0 Security Profile."""
+        r = self.http.get(self.base + "/api/server/v1/configs/fapi")
+        if r.status_code != 200:
+            return False
+        cfg = r.json()
+        return bool(cfg.get("enabled")) and "FAPI2_SECURITY" in (cfg.get("supportedProfiles") or [])
+
+    def create_app(self, name: str, callbacks: list[str], cert_pem: str, fapi2: bool = False) -> dict[str, str]:
+        """Confidential client: private_key_jwt (ES256), PKCE S256, PAR, DPoP-bound JWT tokens.
+
+        With `fapi2`, the app is FAPI 2.0 Security Profile conformant. IS then returns `iss` in the
+        authorization response (RFC 9207), which the conformance suite requires.
+        """
         callback = callbacks[0] if len(callbacks) == 1 else "regexp=(" + "|".join(callbacks) + ")"
         body = {
             "name": name,
@@ -98,6 +110,8 @@ class ISAdmin:
                 }
             },
         }
+        if fapi2:
+            body["inboundProtocolConfiguration"]["oidc"].update(isFAPIApplication=True, fapiProfile="FAPI2_SECURITY")
         r = self._req("POST", "/api/server/v1/applications", (201,), json=body)
         app_id = r.headers["Location"].rstrip("/").rsplit("/", 1)[-1]
         oidc = self._req("GET", f"/api/server/v1/applications/{app_id}/inbound-protocols/oidc").json()

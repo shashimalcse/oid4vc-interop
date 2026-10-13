@@ -1,23 +1,17 @@
 # Baseline for oid4vp-1final-verifier-haip-test-plan (haip, x509_hash, request_uri_signed,
-# sd_jwt_vc, direct_post.jwt). Observed 2026-10-13 against IS 7.4.0-SNAPSHOT super tenant
-# (identity-openid4vc 1.1.16 + the _sd_alg default fix), with a CA-issued request-signing
-# certificate (tools/install_request_cert.py). Numbers in brackets refer to the gap analysis.
+# sd_jwt_vc, direct_post.jwt). Observed 2026-10-13 against IS 7.4.0-SNAPSHOT super tenant with a
+# CA-issued request-signing certificate (tools/install_request_cert.py) and identity-openid4vc 1.1.16
+# plus the unreleased fix/sd-jwt-default-sd-alg and fix/vp-client-metadata-final branches (see
+# vp-base.yaml). Numbers in brackets refer to the gap analysis.
 #
 # IS decrypts and verifies correctly (valid presentations VERIFIED, every negative module rejected
-# for its own flaw). Modules fail on client_metadata gaps and the missing redirect_uri.
+# for its own flaw). The only remaining HAIP gap is the missing redirect_uri.
 profile: vp-haip
 cases:
   "oid4vp-1final-verifier-*":
     expect: FAILED
-    reason: >-
-      [#7] client_id_scheme sent; [#6] vp_formats instead of vp_formats_supported; [#5] encryption
-      JWK has no alg; HAIP 5: no encrypted_response_enc_values_supported; [VP-39] direct_post
-      response has no redirect_uri
+    reason: "[VP-39] the direct_post response has no redirect_uri (HAIP 1.0 §5.1)"
     conditions:
-      - CheckNoClientIdSchemeParameter
-      - VP1FinalValidateVpFormatsSupportedInClientMetadata
-      - VP1FinalValidateClientMetadataJwksForEncryptedResponse
-      - ValidateVpClientMetadataEncryptionForHaip
       - VP1FinalEnsureDirectPostResponseHasRedirectUriForHaip
   oid4vp-1final-verifier-request-uri-method-post:
     expect: SKIPPED

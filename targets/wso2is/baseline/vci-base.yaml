@@ -1,5 +1,11 @@
 # Known gaps for oid4vci-1_0-issuer-test-plan against IS 7.4.0-SNAPSHOT.
-# Seeded from the 2026-08-30 run and HAIP-GAPS.md; refresh after each baseline run.
+# Seeded from the 2026-08-30 run; confirmed 2026-10-13 against the super tenant with:
+#   - [oauth] enable_authorization_response_iss_parameter = true (identity-oauth
+#     feat/authz-response-iss-config). Without it every flow fails RequireIssInAuthorizationResponse;
+#   - identity-openid4vc PR #30 (DPoP at the credential endpoint). Without it the credential endpoint
+#     answers 401 to DPoP-bound tokens, so every flow fails before these checks.
+# Also observed, not failing: c_nonce in error responses and the pre-final "credential" key (warnings),
+# and "id" inside credential_configurations_supported entries (metadata warning).
 profile: vci-base
 cases:
   oid4vci-1_0-issuer-happy-flow*:
