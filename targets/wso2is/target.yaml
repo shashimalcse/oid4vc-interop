@@ -31,6 +31,10 @@ issuer:
     pem: "${setup.credential_trust_anchor_pem}"
 
 verifier:
+  # The super tenant's request-signing certificate is issued by the fixed test CA (see
+  # tools/install_request_cert.py and CONFIGURATION.md section 7), so that CA is the trust anchor.
+  request_trust_anchor:
+    file: keys/test-ca.crt
   start_presentation:
     suite:
       http:
@@ -72,6 +76,12 @@ verifier:
 hooks:
   setup: [python, hooks/setup.py]
   teardown: [python, hooks/teardown.py]
+
+# Fixed test CA (`vcit keygen --target targets/wso2is`): it issues the IS request-signing
+# certificate, the PIDs the suite and vcit present, and the client certificates.
+pki:
+  ca_cert_file: keys/test-ca.crt
+  ca_key_file: keys/test-ca.key
 
 baseline_dir: baseline
 

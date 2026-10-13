@@ -97,8 +97,8 @@ class VciHaipProfile(VciBaseProfile):
         cfg = self.ctx.target.issuer
         if cfg.credential_trust_anchor is None:
             raise ValueError("vci-haip needs issuer.credential_trust_anchor (the certificate issued credentials chain to)")
-        anchor = cfg.credential_trust_anchor.read()
-        status_anchor = cfg.status_list_trust_anchor.read() if cfg.status_list_trust_anchor else anchor
+        anchor = cfg.credential_trust_anchor.read(self.ctx.target.directory)
+        status_anchor = cfg.status_list_trust_anchor.read(self.ctx.target.directory) if cfg.status_list_trust_anchor else anchor
         config["client_attestation"] = {
             "issuer": ATTESTER_ISSUER,
             "attester_jwks": self.ctx.keys.attester.jwks(private=True, with_x5c=True),

@@ -154,7 +154,7 @@ class Verifier:
 
     def trust_anchor_pem(self, kind: str, required: bool) -> str | None:
         if self.cfg.request_trust_anchor:
-            return self.cfg.request_trust_anchor.read()
+            return self.cfg.request_trust_anchor.read(self.ctx.target.directory)
         _, chain = self.request_certificate(kind)
         last = chain[-1]
         if last.issuer == last.subject:

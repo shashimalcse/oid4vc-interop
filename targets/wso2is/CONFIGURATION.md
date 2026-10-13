@@ -132,18 +132,34 @@ You do not create any of these by hand. `hooks/setup.py` makes them per run, nam
 If a run is killed before teardown, delete leftovers named `vcit-*` in the Console: applications,
 VC templates, presentation definitions and users.
 
-## 7. Request-signing certificate (known limitation)
+## 7. Request-signing certificate (super tenant)
 
-IS signs OID4VP requests with the tenant's EC key. Its certificate is self-signed, with CN and SAN DNS
-set to the tenant name. Two consequences:
+IS signs OID4VP request objects with the primary keystore's EC entry `wso2carbon_ec`
+(`repository/resources/security/wso2carbon.p12`, from `[keystore.primary]`), and copies that
+entry's certificate chain into `x5c`. The pack ships a self-signed certificate with CN and SAN DNS
+`carbon.super`, which causes three problems:
+- the suite fails `ValidateRequestObjectSignatureAgainstX5cHeader` ("leaf must not be self-signed");
+- `x509_san_dns:carbon.super` does not match the `response_uri` host, so spec-strict wallets refuse it;
+- a keystore chain longer than one certificate puts the trust anchor in `x5c`, which HAIP forbids.
 
-- `ValidateRequestObjectSignatureAgainstX5cHeader` fails in every vp-* module ("leaf certificate
-  must not be self-signed"). This is recorded in `baseline/`.
-- For `wallet-vp`, vcit makes the wallets trust that self-signed certificate directly, so trust is
-  not what blocks them.
+Replace the entry with a key and certificate issued by the target's fixed test CA, with the
+public hostname as SAN, and store the leaf only:
 
-A CA-issued request certificate is needed for HAIP certification. We have not yet verified a
-supported way to configure one per tenant.
+```bash
+vcit keygen --target targets/wso2is                        # once: keys/test-ca.{crt,key}
+python targets/wso2is/tools/install_request_cert.py \
+  --pack <IS_HOME> --host <public-hostname> \
+  --ca-cert targets/wso2is/keys/test-ca.crt --ca-key targets/wso2is/keys/test-ca.key
+# then restart IS (with the same options it was started with, e.g. -DportOffset=10)
+```
+
+The tool backs up the keystore first (`wso2carbon.p12.<timestamp>.bak`). `target.yaml` already
+points `verifier.request_trust_anchor` at `keys/test-ca.crt`, so the suite and the wallets trust
+the new certificate. Anything else in the super tenant that signs with `wso2carbon_ec` uses the new
+key from then on.
+
+For a tenant (`/t/<tenant>`), the EC key lives in the tenant keystore in the registry, not in a file.
+This tool does not cover that case.
 
 ## 8. Check the setup
 

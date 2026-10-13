@@ -1,18 +1,18 @@
 # Baseline for oid4vp-1final-verifier-test-plan (vp_profile=plain_vp, sd_jwt_vc, x509_hash,
-# request_uri_signed, direct_post.jwt). Observed 2026-10-12 against IS 7.4.0-SNAPSHOT
-# (identity-openid4vc 1.1.16 + the _sd_alg default fix). HAIP-GAPS.md numbers in brackets.
+# request_uri_signed, direct_post.jwt). Observed 2026-10-13 against IS 7.4.0-SNAPSHOT super tenant
+# (identity-openid4vc 1.1.16 + the _sd_alg default fix), with a CA-issued request-signing
+# certificate (tools/install_request_cert.py). Numbers in brackets refer to the gap analysis.
 #
 # IS verifies correctly: valid presentations end VERIFIED and every negative module is rejected
-# for its own flaw. Modules fail only on request-object checks.
+# for its own flaw. Modules fail only on request-object client_metadata checks.
 profile: vp-base
 cases:
   "oid4vp-1final-verifier-*":
     expect: FAILED
     reason: >-
-      [#11] self-signed request-object leaf; [#7] client_id_scheme still sent;
-      [#6] client_metadata lacks vp_formats_supported; [#5] encryption JWK has no alg
+      [#7] client_id_scheme still sent; [#6] client_metadata lacks vp_formats_supported;
+      [#5] encryption JWK has no alg
     conditions:
-      - ValidateRequestObjectSignatureAgainstX5cHeader
       - CheckNoClientIdSchemeParameter
       - VP1FinalValidateVpFormatsSupportedInClientMetadata
       - VP1FinalValidateClientMetadataJwksForEncryptedResponse

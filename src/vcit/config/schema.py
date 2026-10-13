@@ -135,8 +135,14 @@ class Pem(_Model):
             raise ValueError("give exactly one of pem or file")
         return self
 
-    def read(self) -> str:
-        return self.pem if self.pem is not None else Path(self.file).read_text()  # type: ignore[arg-type]
+    def read(self, base: Path | None = None) -> str:
+        """The PEM text; a relative `file` is resolved against `base` (the target directory)."""
+        if self.pem is not None:
+            return self.pem
+        path = Path(self.file)  # type: ignore[arg-type]
+        if base is not None and not path.is_absolute():
+            path = base / path
+        return path.read_text()
 
 
 # -- issuer / verifier ----------------------------------------------------------------------

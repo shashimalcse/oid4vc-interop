@@ -52,11 +52,9 @@ def render(trust_anchors: list[str], tls_certs: list[str], wallet_image: str) ->
 
     store = trust / "truststore.p12"
     store.unlink(missing_ok=True)
-    if not tls_certs:
-        # The JVM needs a readable truststore file; a placeholder keeps TLS to public CAs failing
-        # loudly rather than silently, so collect the target's certificates whenever possible.
-        log.warning("no TLS certificate collected; Wallet2 trusts only a placeholder certificate")
-        tls_certs = [_placeholder_cert()]
+    # Start from the JDK's public CAs, so public hosts (tunnels, cloud deployments) stay trusted
+    # even when their leaf certificate rotates; then add the target's own certificates.
+    _seed_with_jdk_cas(trust, wallet_image)
     for i, pem in enumerate(tls_certs):
         (trust / f"tls-{i}.pem").write_text(pem)
         _keytool(trust, f"tls-{i}.pem", f"target-tls-{i}", wallet_image)
@@ -70,13 +68,29 @@ def ensure_default(wallet_image: str) -> None:
         render([], [], wallet_image)
 
 
-def _placeholder_cert() -> str:
-    import tempfile
 
-    from ..core.pki import RunPki
+def _local_keytool() -> str | None:
+    local = shutil.which("keytool") or (
+        str(Path(os.environ["JAVA_HOME"]) / "bin" / "keytool") if os.environ.get("JAVA_HOME") else None
+    )
+    return local if local and Path(local).exists() else None
 
-    with tempfile.TemporaryDirectory() as tmp:
-        return RunPki.create(Path(tmp), "vcit placeholder").ca_pem
+
+def _seed_with_jdk_cas(trust: Path, wallet_image: str) -> None:
+    import_args = ["-importkeystore", "-noprompt", "-srcstorepass", "changeit",
+                   "-destkeystore", "truststore.p12", "-deststoretype", "PKCS12", "-deststorepass", STORE_PASSWORD]
+    local = _local_keytool()
+    if local:
+        cacerts = Path(local).resolve().parent.parent / "lib" / "security" / "cacerts"
+        if cacerts.exists():
+            subprocess.run([local, *import_args, "-srckeystore", str(cacerts)], cwd=trust, check=True, capture_output=True)
+            return
+    # No local JDK: use the Wallet2 image's own CA bundle.
+    subprocess.run(
+        ["docker", "run", "--rm", "--entrypoint", "sh", "-v", f"{trust}:/w", "-w", "/w", wallet_image, "-c",
+         'keytool ' + " ".join(import_args) + ' -srckeystore "$JAVA_HOME/lib/security/cacerts"'],
+        check=True, capture_output=True,
+    )
 
 
 def _keytool(trust: Path, pem_name: str, alias: str, wallet_image: str) -> None:
@@ -84,10 +98,8 @@ def _keytool(trust: Path, pem_name: str, alias: str, wallet_image: str) -> None:
         "-importcert", "-noprompt", "-storetype", "PKCS12", "-storepass", STORE_PASSWORD,
         "-alias", alias, "-file", pem_name, "-keystore", "truststore.p12",
     ]
-    local = shutil.which("keytool") or (
-        str(Path(os.environ["JAVA_HOME"]) / "bin" / "keytool") if os.environ.get("JAVA_HOME") else None
-    )
-    if local and Path(local).exists():
+    local = _local_keytool()
+    if local:
         subprocess.run([local, *args], cwd=trust, check=True, capture_output=True)
         return
     # No local JDK: borrow keytool from the Wallet2 image (a JVM image).

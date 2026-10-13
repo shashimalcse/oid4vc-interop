@@ -122,3 +122,12 @@ def test_wallet_list_defaults_per_type(tmp_path):
         ("eudi", "http://localhost:7007", "managed"), ("waltid-wallet2", "http://w2:1", "external")]
     with pytest.raises(ConfigError, match="listed once"):
         load_target(target(tmp_path, MINIMAL + "wallets: [eudi, eudi]\n"), env={"PASS": "x"})
+
+
+def test_pem_file_is_relative_to_the_target_directory(tmp_path):
+    from vcit.config.schema import Pem
+
+    (tmp_path / "keys").mkdir()
+    (tmp_path / "keys" / "ca.crt").write_text("PEM")
+    assert Pem(file="keys/ca.crt").read(tmp_path) == "PEM"
+    assert Pem(pem="inline").read(tmp_path) == "inline"
