@@ -61,6 +61,8 @@ class VciBaseProfile(SuiteProfile):
             },
             "client": self.client_config(*clients[0]),
         }
+        if issuer.authorization_server:  # else the suite looks for the credential issuer in authorization_servers
+            config["vci"]["authorization_server"] = issuer.authorization_server
         if len(clients) > 1:  # the multiple-clients module needs a second, independent client
             config["client2"] = self.client_config(*clients[1])
         return config

@@ -18,6 +18,7 @@ env_files: [local.env]                # optional KEY=VALUE files, loaded if pres
 issuer:                               # needed by vci-base, vci-haip, wallet-interop
   credential_issuer: https://issuer.example/oid4vci
   credential_configuration_id: EmployeeBadge
+  authorization_server: https://as.example  # optional; defaults to the only entry of authorization_servers
   clients:                            # up to 2 suite clients (the second enables the multiple-clients module)
     - client_id: suite-client-1
       jwk_file: keys/client1.jwk.json # optional private EC P-256 JWK; generated per run otherwise

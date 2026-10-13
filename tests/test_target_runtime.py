@@ -182,3 +182,31 @@ def test_login_error_page_detection():
         page = MagicMock()
         page.url = url
         assert _looks_like_error(page) is want, url
+
+
+@pytest.mark.parametrize("servers, configured, want", [
+    (None, None, None),                                          # no list: the issuer is its own AS
+    (["https://issuer.example"], None, None),                    # the issuer itself
+    (["https://as.example/oauth2/token"], None, "https://as.example/oauth2/token"),
+    (["https://a", "https://b"], "https://b/", "https://b"),
+])
+def test_authorization_server_selection(ctx, servers, configured, want):
+    from vcit.target.issuer import Issuer
+
+    issuer = Issuer(ctx)
+    meta = {"credential_issuer": "https://issuer.example"}
+    if servers is not None:
+        meta["authorization_servers"] = servers
+    issuer.__dict__["metadata"] = meta
+    ctx.target.issuer.authorization_server = configured
+    assert issuer.authorization_server == want
+
+
+def test_authorization_server_ambiguous(ctx):
+    from vcit.target.issuer import Issuer, IssuerError
+
+    issuer = Issuer(ctx)
+    issuer.__dict__["metadata"] = {"credential_issuer": "https://issuer.example",
+                                   "authorization_servers": ["https://a", "https://b"]}
+    with pytest.raises(IssuerError, match="issuer.authorization_server"):
+        issuer.authorization_server

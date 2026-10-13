@@ -63,6 +63,20 @@ class Issuer:
     def credential_issuer(self) -> str:
         return self.metadata.get("credential_issuer") or self.cfg.credential_issuer
 
+    @property
+    def authorization_server(self) -> str | None:
+        """The authorization server the suite should test, or None for the credential issuer."""
+        if self.cfg.authorization_server:
+            return self.cfg.authorization_server.rstrip("/")
+        servers = self.metadata.get("authorization_servers") or []
+        if len(servers) == 1 and servers[0] != self.credential_issuer:
+            return servers[0]
+        if len(servers) > 1 and self.credential_issuer not in servers:
+            raise IssuerError(
+                "the issuer metadata lists several authorization_servers: set issuer.authorization_server"
+            )
+        return None
+
     def suite_clients(self) -> list[tuple[str, KeyPair]]:
         if not self.cfg.clients:
             raise IssuerError("issuer.clients is empty: register at least one client (or return it from setup)")

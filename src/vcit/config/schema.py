@@ -151,6 +151,9 @@ class Pem(_Model):
 class IssuerConfig(_Model):
     credential_issuer: str
     credential_configuration_id: str
+    # Issuer identifier of the authorization server to test, when the metadata lists one that is not
+    # the credential issuer itself. Defaults to the only entry of `authorization_servers`.
+    authorization_server: str | None = None
     clients: list[ClientSpec] = Field(default_factory=list, max_length=2)  # suite: client, client2
     wallet_client: ClientSpec | None = None  # private_key_jwt client for wallet-interop (Wallet2)
     public_client: PublicClientSpec | None = None  # public client for wallet-interop (EUDI wallet)
